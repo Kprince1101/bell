@@ -322,26 +322,48 @@ describe('0004 access', () => {
     await db.close();
   });
 
-  it('delete_me removes channels, secrets and notifications but keeps the shared Slack install', async () => {
-    const { db, calendarId, base } = await ready();
-    await addEvent(db, calendarId, { startsAt: plusMinutes(base, 30) });
-    await actAs(db, ME);
+  it.each([
+    ['a Bell-only user', false],
+    ['a user who keeps a Commander profile', true],
+  ])(
+    'delete_me removes channels, secrets and notifications of %s but keeps the shared Slack install',
+    async (_who, hasProfile) => {
+      const { db, calendarId, base } = await ready();
+      await db.exec(
+        'create table public.profiles (user_id uuid primary key references auth.users(id))',
+      );
+      if (hasProfile) {
+        await db.query('insert into public.profiles (user_id) values ($1)', [
+          ME,
+        ]);
+      }
+      await addEvent(db, calendarId, { startsAt: plusMinutes(base, 30) });
+      await actAs(db, ME);
 
-    await db.query('select bell.delete_me()');
-    await actAsOwner(db);
+      const removable = await db.query<{ delete_me: boolean }>(
+        'select bell.delete_me()',
+      );
+      await actAsOwner(db);
 
-    const counts = await db.query<{ n: number }>(
-      `select count(*)::int as n from bell.channels where user_id = $1
+      const counts = await db.query<{ n: number }>(
+        `select count(*)::int as n from bell.channels where user_id = $1
        union all select count(*)::int from bell.channel_secrets where user_id = $1
        union all select count(*)::int from bell.notifications where user_id = $1
        union all select count(*)::int from bell.channel_secrets where value = $2`,
-      [ME, PHONE],
-    );
-    const install = await db.query<{ installed_by: string | null }>(
-      'select installed_by from bell.slack_installs',
-    );
-    expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0]);
-    expect(install.rows).toEqual([{ installed_by: null }]);
-    await db.close();
-  });
+        [ME, PHONE],
+      );
+      const install = await db.query<{ installed_by: string | null }>(
+        'select installed_by from bell.slack_installs',
+      );
+      const neighbour = await db.query<{ n: number }>(
+        'select count(*)::int as n from bell.users where id = $1',
+        [NEIGHBOUR],
+      );
+      expect(removable.rows[0].delete_me).toBe(!hasProfile);
+      expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0]);
+      expect(install.rows).toEqual([{ installed_by: null }]);
+      expect(neighbour.rows[0].n).toBe(1);
+      await db.close();
+    },
+  );
 });

@@ -102,7 +102,15 @@ describe('0001_bell', () => {
     expect(rows.map((row) => row.column_name).sort()).toEqual(
       Object.keys(EXPECTED_USER_COLUMNS).sort(),
     );
-    expect(await bellTables(db)).toEqual(['allowlist', 'migrations', 'users']);
+    expect(await bellTables(db)).toEqual([
+      'account_secrets',
+      'accounts',
+      'allowlist',
+      'calendars',
+      'events',
+      'migrations',
+      'users',
+    ]);
     await db.close();
   });
 

@@ -173,12 +173,17 @@ describe('getBellUser', () => {
 });
 
 describe('isPublicPath', () => {
-  it('only lets the login page and the callback through', () => {
+  it('only lets the login page, the callback and secret-gated machine routes through', () => {
     expect(isPublicPath('/login')).toBe(true);
     expect(isPublicPath('/auth/callback')).toBe(true);
+    expect(isPublicPath('/api/webhooks/google')).toBe(true);
+    expect(isPublicPath('/api/tick')).toBe(true);
     expect(isPublicPath('/')).toBe(false);
     expect(isPublicPath('/account')).toBe(false);
+    expect(isPublicPath('/calendars')).toBe(false);
     expect(isPublicPath('/api/account')).toBe(false);
+    expect(isPublicPath('/api/calendars')).toBe(false);
+    expect(isPublicPath('/api/google/callback')).toBe(false);
   });
 });
 

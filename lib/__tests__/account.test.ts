@@ -6,11 +6,16 @@ import {
   createSupabaseFake,
 } from '@/test-utils/supabaseFake';
 
+const noGoogle = async () => undefined;
+
 describe('deleteAccount', () => {
-  it('wipes bell data as the user, then removes the auth user, then clears the session', async () => {
+  it('stops Google first, then wipes bell data, removes the auth user and clears the session', async () => {
     const order: string[] = [];
     const { client, fake } = createSupabaseFake();
     const admin = createAdminFake();
+    const disconnectGoogle = vi.fn(async () => {
+      order.push('disconnectGoogle');
+    });
     fake.rpc.mockImplementation(async () => {
       order.push('delete_me');
       return { data: true, error: null };
@@ -24,20 +29,43 @@ describe('deleteAccount', () => {
       return { error: null };
     });
 
-    const result = await deleteAccount(client, admin.client, USER_ID);
+    const result = await deleteAccount(
+      client,
+      admin.client,
+      USER_ID,
+      disconnectGoogle,
+    );
 
     expect(result).toEqual({ authUserRemoved: true });
     expect(fake.rpc).toHaveBeenCalledWith('delete_me');
     expect(admin.fake.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
     expect(fake.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
-    expect(order).toEqual(['delete_me', 'deleteUser', 'signOut']);
+    expect(order).toEqual([
+      'disconnectGoogle',
+      'delete_me',
+      'deleteUser',
+      'signOut',
+    ]);
+  });
+
+  it('keeps every row when stopping Google fails', async () => {
+    const { client, fake } = createSupabaseFake();
+    const admin = createAdminFake();
+
+    await expect(
+      deleteAccount(client, admin.client, USER_ID, async () => {
+        throw new Error('Google 503');
+      }),
+    ).rejects.toThrow('Google 503');
+    expect(fake.rpc).not.toHaveBeenCalled();
+    expect(admin.fake.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
 
   it('keeps the auth user of someone who also has a Commander profile', async () => {
     const { client, fake } = createSupabaseFake({ rpcData: false });
     const admin = createAdminFake();
 
-    const result = await deleteAccount(client, admin.client, USER_ID);
+    const result = await deleteAccount(client, admin.client, USER_ID, noGoogle);
 
     expect(result).toEqual({ authUserRemoved: false });
     expect(fake.rpc).toHaveBeenCalledWith('delete_me');
@@ -49,9 +77,9 @@ describe('deleteAccount', () => {
     const { client } = createSupabaseFake({ rpcError: new Error('boom') });
     const admin = createAdminFake();
 
-    await expect(deleteAccount(client, admin.client, USER_ID)).rejects.toThrow(
-      'boom',
-    );
+    await expect(
+      deleteAccount(client, admin.client, USER_ID, noGoogle),
+    ).rejects.toThrow('boom');
     expect(admin.fake.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
 
@@ -59,9 +87,9 @@ describe('deleteAccount', () => {
     const { client, fake } = createSupabaseFake();
     const admin = createAdminFake({ deleteError: new Error('auth down') });
 
-    await expect(deleteAccount(client, admin.client, USER_ID)).rejects.toThrow(
-      'auth down',
-    );
+    await expect(
+      deleteAccount(client, admin.client, USER_ID, noGoogle),
+    ).rejects.toThrow('auth down');
     expect(fake.auth.signOut).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,9 @@ export const AppHeader = ({ email, showInvites }: AppHeaderProps) => (
       <Link href="/" className="hover:text-accent">
         Agenda
       </Link>
+      <Link href="/calendars" className="hover:text-accent">
+        Calendars
+      </Link>
       {showInvites && (
         <Link href="/invites" className="hover:text-accent">
           Invites

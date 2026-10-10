@@ -12,7 +12,12 @@ export const NO_ACCOUNT_AUTH_CODES = [
 
 export const EMAIL_EXISTS_AUTH_CODE = 'email_exists';
 
-export const PUBLIC_PATH_PREFIXES = ['/login', '/auth/callback'];
+export const PUBLIC_PATH_PREFIXES = [
+  '/login',
+  '/auth/callback',
+  '/api/webhooks/',
+  '/api/tick',
+];
 
 export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
@@ -26,6 +31,21 @@ export const LOGIN_ERROR_MESSAGES: Record<string, string> = {
 
 export const LOGIN_NOTICE_MESSAGES: Record<string, string> = {
   deleted: 'Your account and everything in it has been deleted.',
+};
+
+export const CALENDARS_PATH = '/calendars';
+
+export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {
+  'connect-denied': 'Google access was not granted, so nothing was connected.',
+  'connect-failed':
+    'Connecting that Google account did not complete. Please try again.',
+};
+
+export const CALENDAR_NOTICE_MESSAGES: Record<string, string> = {
+  connected:
+    'Google account connected. Pick the calendars Bell should include.',
+  disconnected: 'Google account disconnected and its events removed.',
+  saved: 'Calendars saved.',
 };
 
 export const INVITE_MESSAGES = {

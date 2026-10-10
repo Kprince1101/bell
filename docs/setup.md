@@ -78,13 +78,19 @@ One OAuth client serves sign-in now and calendar access in Bell 1. Sign-in asks 
 1. **Project.** [vercel.com/new](https://vercel.com/new) → Import `Kprince1101/bell` → Project name `bell` → Framework Next.js (detected) → add env before the first deploy if it offers.
 2. **Environment variables** (Settings → Environment Variables), for Production and Preview:
 
-   | Name                            | Value                         | Sensitive |
-   | ------------------------------- | ----------------------------- | --------- |
-   | `NEXT_PUBLIC_SUPABASE_URL`      | `https://<ref>.supabase.co`   | no        |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key from 1.1         | no        |
-   | `SUPABASE_SERVICE_ROLE_KEY`     | the service role key from 1.1 | yes       |
+   | Name                            | Value                                                   | Sensitive |
+   | ------------------------------- | ------------------------------------------------------- | --------- |
+   | `NEXT_PUBLIC_SUPABASE_URL`      | `https://<ref>.supabase.co`                             | no        |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key from 1.1                                   | no        |
+   | `SUPABASE_SERVICE_ROLE_KEY`     | the service role key from 1.1                           | yes       |
+   | `BELL_APP_URL`                  | `https://bell.dontpanic.fyi` (Production only, see 8.1) | no        |
+   | `GOOGLE_CLIENT_ID`              | Client ID from 3.4                                      | no        |
+   | `GOOGLE_CLIENT_SECRET`          | Client secret from 3.4                                  | yes       |
+   | `BELL_TOKEN_KEY`                | output of `openssl rand -base64 32`                     | yes       |
+   | `BELL_WEBHOOK_SECRET`           | output of `openssl rand -base64 48`                     | yes       |
+   | `CRON_SECRET`                   | output of `openssl rand -base64 48`                     | yes       |
 
-   The service role key is used only by Bell's server: the Invites action and `DELETE /api/account`. `DATABASE_URL` and `SUPABASE_PROJECT_REF` do not go to Vercel.
+   The service role key is used only by Bell's server: the Invites action, `DELETE /api/account`, and the Google sync (Bell 1), which writes calendars and events. None of these values go in the repo, which is public. `DATABASE_URL` and `SUPABASE_PROJECT_REF` do not go to Vercel.
 
 3. **Domain.** Settings → Domains → Add `bell.dontpanic.fyi`. Vercel shows the DNS record it wants; add it in section 6.
 4. **Deploy.** Deployments → Redeploy (or merge to `main`).
@@ -113,6 +119,31 @@ Check: `https://bell.dontpanic.fyi` loads the Bell sign-in page with a valid cer
    ```
 
 `bell.delete_me()` deletes from every `bell` table that has a `user_id` column, then the user row (which cascades), then the allowlist entry, and reports whether the login may go. `DELETE /api/account` removes the auth user only when that user has no `public.profiles` row, so deleting a Bell account never removes a Commander login.
+
+## 8. Bell 1: Google calendars
+
+Bell never polls Google. Each included calendar has a watch channel that makes Google POST to `https://bell.dontpanic.fyi/api/webhooks/google` when something changes; Bell then pulls only the delta with the stored sync token. The only timer is the scheduler tick, and it only renews channels.
+
+1. **Secrets.** Add the six Bell 1 variables from 5.2 to Vercel (Production; Preview too if you want to connect from a preview, but `BELL_APP_URL` must stay the verified domain because Google only delivers pushes there). Redeploy.
+   - `BELL_TOKEN_KEY` encrypts every stored Google refresh token (AES-256-GCM, in `bell.account_secrets`, which only the service role can read). Keep a copy somewhere safe: if it is lost or changed, every connected account has to be disconnected and connected again.
+   - `BELL_WEBHOOK_SECRET` signs each channel's token, so Bell can tell Google's notifications from forged ones. Changing it makes existing channels fail verification until the next renewal; disconnect and reconnect to recover sooner.
+   - For local work put the same names in `.env.local` with `BELL_APP_URL=http://localhost:3000`. Connecting works locally; push notifications do not, because Google only calls the verified HTTPS domain.
+2. **Migration 0002.** `npm run db:migrate` prints `applied 0002_google_calendars.sql` (or the **Migrate** workflow does it on merge). Check: `select name from bell.migrations;` lists both files.
+3. **Google Cloud.**
+   - Confirm 3.4 has the redirect URI `https://bell.dontpanic.fyi/api/google/callback` and 3.3 has the `openid`, `email`, and both Calendar scopes. Bell asks for `openid email` alongside the two Calendar scopes so it can tell your Google accounts apart.
+   - Confirm 3.5 is done: APIs & Services → **Domain verification** lists `bell.dontpanic.fyi`. Without it, registering a watch channel fails with "Unauthorized WebHook callback channel" and the calendar shows as unhealthy.
+   - **Publish the app** (Google Auth Platform → Audience → Publish app). In Testing, Google expires Calendar refresh tokens after 7 days and every calendar goes unhealthy.
+4. **Scheduler tick.** `GET` or `POST https://bell.dontpanic.fyi/api/tick` with header `Authorization: Bearer <CRON_SECRET>` renews every channel that expires within 24 hours and marks calendars whose push has stopped as unhealthy. Bell 3 owns the schedule. Until it ships, call it at least every 6 hours, for example with a Vercel Cron job on `/api/tick` (Vercel sends the `CRON_SECRET` header itself) or Supabase `pg_cron` + `pg_net`. Channels last 7 days, so a missed tick only matters after several days.
+5. **Prove it.**
+   1. Calendars → **Connect a Google account** → pick your personal account → consent. Repeat for a second account (a client Workspace).
+   2. Tick three calendars across the two accounts, give each a color, **Save calendars**. Each shows "Last synced ..." within a few seconds.
+   3. Create an event in any of the three in Google Calendar. Within seconds:
+      ```sql
+      select title, starts_at, status, fingerprint from bell.events order by last_seen_at desc limit 5;
+      ```
+      shows it. Move it: same row, new `starts_at` and `fingerprint`. Delete it: same row, `status = 'cancelled'`.
+   4. Vercel → Logs, filter `[bell]`: every `[bell] sync` line says `trigger=webhook` or `trigger=connect`, never anything else; tick runs log only `[bell] watch`, `[bell] unwatch` and `[bell] tick` lines. That is the proof no calendar is fetched on a timer.
+   5. Disconnect one account: its calendars and events are gone (`select count(*) from bell.events e join bell.calendars c on c.id = e.calendar_id where c.account_id = '<id>';` is 0) and it no longer appears under myaccount.google.com → Security → Third-party connections.
 
 ## Conventions
 

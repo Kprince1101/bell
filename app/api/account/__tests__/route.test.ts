@@ -1,6 +1,8 @@
 import { DELETE, PATCH } from '@/app/api/account/route';
+import { bellServices } from '@/lib/calendars/bellServices';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { createFakeServices } from '@/test-utils/calendarFakes';
 import {
   USER_ID,
   createAdminFake,
@@ -9,6 +11,7 @@ import {
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }));
+vi.mock('@/lib/calendars/bellServices', () => ({ bellServices: vi.fn() }));
 
 const jsonRequest = (method: string, body: unknown) =>
   new Request('https://bell.test/api/account', {
@@ -20,9 +23,11 @@ const jsonRequest = (method: string, body: unknown) =>
 const signedIn = (options = {}) => {
   const supabase = createSupabaseFake(options);
   const admin = createAdminFake();
+  const google = createFakeServices();
   vi.mocked(createClient).mockResolvedValue(supabase.client);
   vi.mocked(createAdminClient).mockReturnValue(admin.client);
-  return { supabase: supabase.fake, admin: admin.fake };
+  vi.mocked(bellServices).mockReturnValue(google.services);
+  return { supabase: supabase.fake, admin: admin.fake, google };
 };
 
 describe('DELETE /api/account', () => {
@@ -45,14 +50,26 @@ describe('DELETE /api/account', () => {
     expect(admin.auth.admin.deleteUser).not.toHaveBeenCalled();
   });
 
-  it('wipes the account and the auth user', async () => {
-    const { supabase, admin } = signedIn();
+  it('stops channels and revokes Google tokens before wiping the account', async () => {
+    const { supabase, admin, google } = signedIn();
+    const order: string[] = [];
+    google.google.stopChannel.mockImplementation(async () => {
+      order.push('stopChannel');
+    });
+    google.google.revokeToken.mockImplementation(async () => {
+      order.push('revokeToken');
+    });
+    supabase.rpc.mockImplementation(async () => {
+      order.push('delete_me');
+      return { data: null, error: null };
+    });
 
     const response = await DELETE(jsonRequest('DELETE', { confirm: 'DELETE' }));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ deleted: true });
-    expect(supabase.rpc).toHaveBeenCalledWith('delete_me');
+    expect(order).toEqual(['stopChannel', 'revokeToken', 'delete_me']);
+    expect(google.repo.accountsForUser).toHaveBeenCalledWith(USER_ID);
     expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
   });
 

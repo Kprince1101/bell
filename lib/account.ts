@@ -28,7 +28,10 @@ export const deleteAccount = async (
   supabase: BellClient,
   admin: AdminClient,
   userId: string,
+  disconnectGoogle: () => Promise<void>,
 ): Promise<DeleteAccountResult> => {
+  await disconnectGoogle();
+
   const { data: removeAuthUser, error } = await supabase.rpc('delete_me');
   if (error) throw error;
 

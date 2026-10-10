@@ -46,6 +46,7 @@ export const calendarRow = (
   channel_resource_id: 'resource-1',
   channel_expires_at: '2026-10-15T12:00:00.000Z',
   active: true,
+  paused: false,
   healthy: true,
   last_sync_at: '2026-10-10T11:00:00.000Z',
   last_error: null,

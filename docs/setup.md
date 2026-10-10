@@ -145,6 +145,23 @@ Bell never polls Google. Each included calendar has a watch channel that makes G
    4. Vercel → Logs, filter `[bell]`: every `[bell] sync` line says `trigger=webhook` or `trigger=connect`, never anything else; tick runs log only `[bell] watch`, `[bell] unwatch` and `[bell] tick` lines. That is the proof no calendar is fetched on a timer.
    5. Disconnect one account: its calendars and events are gone (`select count(*) from bell.events e join bell.calendars c on c.id = e.calendar_id where c.account_id = '<id>';` is 0) and it no longer appears under myaccount.google.com → Security → Third-party connections.
 
+## 8. Bell 2: agenda
+
+The agenda at `/` shows today and the next 7 days from every included calendar, in the time zone set on Account. It updates live: the browser subscribes to Supabase Realtime changes on `bell.events` for the signed-in user (RLS decides what it may see) and reloads the agenda when a sync lands.
+
+1. **Migration 0003.** `npm run db:migrate` prints `applied 0003_agenda.sql` (or the **Migrate** workflow does it on merge). It adds:
+   - `bell.events.changed_at` and `previous_starts_at`, stamped by a trigger whenever a sync adds, moves or cancels an event after the calendar's first sync. The agenda marks those changes for 24 hours.
+   - `bell.calendars.paused`: a paused calendar keeps syncing but is hidden from the agenda.
+   - `bell.agenda_visits`: when each user last looked, so "since you last looked" survives reloads.
+   - `bell.events` in the `supabase_realtime` publication.
+2. **Realtime.** Check: Database → Publications → `supabase_realtime` lists `bell.events`. If the migration ran before the publication existed, run `alter publication supabase_realtime add table bell.events;` in the SQL editor. Nothing else needs turning on; the browser uses the anon key and the user's session.
+3. **Prove it.**
+   1. With two Google accounts connected and three calendars included, invite both of your accounts to one meeting. The agenda shows it once, with both calendars' badges.
+   2. Create an event at 1:00 PM in Google Calendar with its time zone set to Eastern (TZID `America/New_York`) while your Account time zone is Central. Its card shows a red flag: `12:00 PM CT · invite says 1:00 PM ET`.
+   3. Open the agenda on a phone: the next event is pinned at the top and its countdown ticks every second.
+   4. Move, cancel or create an event in Google Calendar. Within seconds, without reloading, the card shows **Moved** with the old time struck through, **Cancelled** with the title struck through, or **New**.
+   5. Calendars → tick **Pause** on one calendar → Save: its events leave the agenda; untick to bring them back.
+
 ## Conventions
 
 - **Migrations** live in `supabase/migrations/NNNN_name.sql`, create objects only in the `bell` schema, and are applied by `npm run db:migrate`.

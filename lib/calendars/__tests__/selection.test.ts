@@ -22,6 +22,7 @@ const PICKED = calendarRow({
 const choice = (overrides = {}) => ({
   id: CALENDAR_ID,
   active: true,
+  paused: false,
   label: 'Client A',
   color: '#ff8800',
   ...overrides,
@@ -89,6 +90,17 @@ describe('applyCalendarChoices', () => {
     expect(repo.saveChoice).toHaveBeenCalledWith(choice({ label: 'Renamed' }));
     expect(google.listEvents).not.toHaveBeenCalled();
     expect(google.watchEvents).not.toHaveBeenCalled();
+  });
+
+  it('pauses a calendar without touching its sync or channel', async () => {
+    const { services, google, repo } = createFakeServices();
+
+    await applyCalendarChoices(services, USER_ID, [choice({ paused: true })]);
+
+    expect(repo.saveChoice).toHaveBeenCalledWith(choice({ paused: true }));
+    expect(google.stopChannel).not.toHaveBeenCalled();
+    expect(repo.clearCalendar).not.toHaveBeenCalled();
+    expect(google.listEvents).not.toHaveBeenCalled();
   });
 
   it('stops the channel and clears the events of a calendar that is dropped', async () => {

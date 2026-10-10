@@ -1,4 +1,5 @@
 import { HealthBadge } from '@/components/calendars/HealthBadge';
+import { HealthDetails } from '@/components/calendars/HealthDetails';
 import type { CalendarRowModel } from '@/hooks/useCalendarsClient';
 
 interface CalendarChoiceRowProps {
@@ -6,7 +7,7 @@ interface CalendarChoiceRowProps {
 }
 
 export const CalendarChoiceRow = ({ calendar }: CalendarChoiceRowProps) => (
-  <li className="flex flex-wrap items-center gap-3">
+  <li className="flex flex-wrap items-center gap-3 border-t border-border pt-3 first:border-t-0 first:pt-0">
     <input
       type="checkbox"
       checked={calendar.choice.active}
@@ -27,6 +28,19 @@ export const CalendarChoiceRow = ({ calendar }: CalendarChoiceRowProps) => (
       aria-label={`Label for ${calendar.googleCalendarId}`}
       className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5"
     />
+    {calendar.showPause && (
+      <label className="flex items-center gap-1.5 text-sm text-text-muted">
+        <input
+          type="checkbox"
+          checked={calendar.choice.paused}
+          onChange={calendar.onPauseToggle}
+          aria-label={`Pause ${calendar.googleCalendarId}`}
+          className="h-4 w-4 accent-accent"
+        />
+        Pause
+      </label>
+    )}
     <HealthBadge health={calendar.health} />
+    <HealthDetails details={calendar.details} />
   </li>
 );

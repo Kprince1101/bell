@@ -21,6 +21,21 @@ export const STANDUP_MOVED: GoogleEvent = {
   end: { dateTime: '2026-10-12T10:15:00-05:00', timeZone: 'America/Chicago' },
 };
 
+export const CLIENT_REVIEW_ET: GoogleEvent = {
+  id: 'client-review',
+  status: 'confirmed',
+  summary: 'Client review',
+  start: {
+    dateTime: '2026-10-12T13:00:00-04:00',
+    timeZone: 'America/New_York',
+  },
+  end: {
+    dateTime: '2026-10-12T14:00:00-04:00',
+    timeZone: 'America/New_York',
+  },
+  organizer: { email: 'pm@client.com' },
+};
+
 export const STANDUP_DELETED: GoogleEvent = {
   id: 'standup',
   status: 'cancelled',

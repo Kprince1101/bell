@@ -37,6 +37,26 @@ export const actAs = async (db: PGlite, userId: string): Promise<void> => {
   ]);
 };
 
+export const bellTables = async (db: PGlite): Promise<string[]> => {
+  const { rows } = await db.query<{ table_name: string }>(
+    "select table_name from information_schema.tables where table_schema = 'bell' and table_type = 'BASE TABLE' order by table_name",
+  );
+  return rows.map((row) => row.table_name);
+};
+
+export const countMentions = async (
+  db: PGlite,
+  table: string,
+  markers: string[],
+): Promise<number> => {
+  const { rows } = await db.query<{ hits: number }>(
+    `select count(*)::int as hits from bell.${table} t
+     where exists (select 1 from unnest($1::text[]) m where to_jsonb(t)::text ilike '%' || m || '%')`,
+    [markers],
+  );
+  return rows[0].hits;
+};
+
 export const actAsOwner = async (db: PGlite): Promise<void> => {
   await db.exec('reset role');
   await db.query("select set_config('request.jwt.claim.sub', '', false)");

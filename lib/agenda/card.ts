@@ -33,7 +33,14 @@ const badgesFor = (
   group.calendarIds.flatMap((calendarId) => {
     const calendar = calendars.get(calendarId);
     if (!calendar) return [];
-    return [{ key: calendar.id, label: calendar.label, color: calendar.color }];
+    return [
+      {
+        key: calendar.id,
+        label: calendar.label,
+        color: calendar.color,
+        shared: calendar.shared,
+      },
+    ];
   });
 
 const timeLabel = (group: MergedEvent, timeZone: string): string => {

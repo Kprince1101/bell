@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarChoicesForm } from '@/components/calendars/CalendarChoicesForm';
+import { CalendarSharing } from '@/components/calendars/CalendarSharing';
 import { CalendarsHeader } from '@/components/calendars/CalendarsHeader';
 import { NoAccounts } from '@/components/calendars/NoAccounts';
 import { Message } from '@/components/ui/Message';
@@ -23,6 +24,7 @@ export const CalendarsClient = (props: CalendarsClientProps) => {
           disconnect={view.disconnect}
         />
       )}
+      <CalendarSharing sharing={view.sharing} />
     </div>
   );
 };

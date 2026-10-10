@@ -1,3 +1,4 @@
+import { SHARED_BADGE_SUFFIX } from '@/lib/constants';
 import type { AgendaBadge } from '@/types/agenda';
 
 interface SourceBadgesProps {
@@ -17,6 +18,9 @@ export const SourceBadges = ({ badges }: SourceBadgesProps) => (
           style={{ backgroundColor: badge.color }}
         />
         {badge.label}
+        {badge.shared && (
+          <span className="text-text-muted">· {SHARED_BADGE_SUFFIX}</span>
+        )}
       </li>
     ))}
   </ul>

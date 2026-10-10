@@ -4,6 +4,7 @@ import {
   AGENDA_NOW,
   CLIENT,
   PERSONAL,
+  TEAM,
   agendaEvent,
   agendaRows,
 } from '@/test-utils/agendaFakes';
@@ -59,10 +60,31 @@ describe('buildAgenda', () => {
     ]).cards;
 
     expect(card.badges).toEqual([
-      { key: PERSONAL.id, label: 'Personal', color: PERSONAL.color },
-      { key: CLIENT.id, label: 'Client', color: CLIENT.color },
+      {
+        key: PERSONAL.id,
+        label: 'Personal',
+        color: PERSONAL.color,
+        shared: false,
+      },
+      { key: CLIENT.id, label: 'Client', color: CLIENT.color, shared: false },
     ]);
     expect(card.accentColor).toBe(PERSONAL.color);
+  });
+
+  it('badges a shared calendar’s meeting with the sharer’s label, marked shared', () => {
+    const view = buildAgenda({
+      rows: agendaRows(
+        [agendaEvent({ id: 'team-1', calendar_id: TEAM.id })],
+        [PERSONAL, TEAM],
+      ),
+      timeZone: CT,
+      now: AGENDA_NOW,
+      baselineAt: null,
+    });
+
+    expect(view.days[0].cards[0].badges).toEqual([
+      { key: TEAM.id, label: 'Team standups', color: TEAM.color, shared: true },
+    ]);
   });
 
   it('flags an invite whose time zone is not the user’s and shows both times', () => {

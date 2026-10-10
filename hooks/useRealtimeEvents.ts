@@ -3,7 +3,21 @@ import { createClient } from '@/lib/supabase/client';
 
 export const REALTIME_SUBSCRIBED = 'SUBSCRIBED';
 
-export const useRealtimeEvents = (userId: string, onChange: () => void) => {
+const eventChanges = (filter: string) => ({
+  event: '*' as const,
+  schema: 'bell',
+  table: 'events',
+  filter,
+});
+
+export const sharedEventsFilter = (sharedKey: string): string =>
+  `calendar_id=in.(${sharedKey})`;
+
+export const useRealtimeEvents = (
+  userId: string,
+  sharedKey: string,
+  onChange: () => void,
+) => {
   const [isLive, setIsLive] = useState(false);
   const onChangeRef = useRef(onChange);
 
@@ -13,24 +27,23 @@ export const useRealtimeEvents = (userId: string, onChange: () => void) => {
 
   useEffect(() => {
     const client = createClient();
+    const notify = () => onChangeRef.current();
     const channel = client
       .channel(`agenda:${userId}`)
-      .on(
+      .on('postgres_changes', eventChanges(`user_id=eq.${userId}`), notify);
+    if (sharedKey) {
+      channel.on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'bell',
-          table: 'events',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => onChangeRef.current(),
-      )
-      .subscribe((status) => setIsLive(status === REALTIME_SUBSCRIBED));
+        eventChanges(sharedEventsFilter(sharedKey)),
+        notify,
+      );
+    }
+    channel.subscribe((status) => setIsLive(status === REALTIME_SUBSCRIBED));
     return () => {
       setIsLive(false);
       void client.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, sharedKey]);
 
   return { isLive };
 };

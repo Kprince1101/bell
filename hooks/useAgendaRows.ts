@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadAgendaRows } from '@/lib/agenda/read';
+import { sharedCalendarKey } from '@/lib/agenda/shared';
 import { agendaWindow } from '@/lib/agenda/window';
 import { AGENDA_REFRESH_DELAY_MS } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/client';
@@ -37,7 +38,11 @@ export const useAgendaRows = ({
     timer.current = setTimeout(() => void refresh(), AGENDA_REFRESH_DELAY_MS);
   }, [refresh]);
 
-  const { isLive } = useRealtimeEvents(userId, scheduleRefresh);
+  const { isLive } = useRealtimeEvents(
+    userId,
+    sharedCalendarKey(rows),
+    scheduleRefresh,
+  );
 
   useEffect(() => {
     const handleVisibility = () => {

@@ -3,14 +3,24 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { useCalendarsClient } from '@/hooks/useCalendarsClient';
 import {
   disconnectGoogleAccount,
+  removeCalendarShare,
   saveCalendarChoices,
+  shareCalendar,
 } from '@/lib/calendarsApi';
 import { redirectTo } from '@/lib/navigation';
+import {
+  NO_SHARING,
+  SHARING,
+  TEAMMATE_ID,
+  VIEWER_ID,
+} from '@/test-utils/sharingFakes';
 import type { CalendarsClientProps } from '@/types/calendar';
 
 vi.mock('@/lib/calendarsApi', () => ({
   saveCalendarChoices: vi.fn(),
   disconnectGoogleAccount: vi.fn(),
+  shareCalendar: vi.fn(),
+  removeCalendarShare: vi.fn(),
 }));
 vi.mock('@/lib/navigation', () => ({ redirectTo: vi.fn() }));
 
@@ -43,6 +53,7 @@ const PROPS: CalendarsClientProps = {
       ],
     },
   ],
+  sharing: NO_SHARING,
   error: null,
   notice: 'Calendars saved.',
 };
@@ -158,5 +169,88 @@ describe('useCalendarsClient', () => {
 
     expect(result.current.disconnect.disconnectError).toBe('nope');
     expect(redirectTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('useCalendarsClient sharing', () => {
+  const SHARED_PROPS: CalendarsClientProps = { ...PROPS, sharing: SHARING };
+
+  it('lists who each calendar is shared with and what is shared with me', () => {
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+    const { sharing } = result.current;
+
+    expect(sharing.hasCalendars).toBe(true);
+    expect(sharing.calendars[0].recipients.map((r) => r.email)).toEqual([
+      'teammate@example.com',
+    ]);
+    expect(sharing.calendars[0].recipients[0].removeLabel).toBe('Stop sharing');
+    expect(sharing.calendars[0].canShare).toBe(false);
+    expect(sharing.hasSharedWithMe).toBe(true);
+    expect(sharing.sharedWithMe[0].label).toBe('Team standups');
+  });
+
+  it('shares a calendar with a typed email and reloads with a notice', async () => {
+    vi.mocked(shareCalendar).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+
+    act(() =>
+      result.current.sharing.calendars[0].onEmailChange(
+        input(' new@example.com '),
+      ),
+    );
+    expect(result.current.sharing.calendars[0].canShare).toBe(true);
+    await act(() => result.current.sharing.calendars[0].onShare(submitEvent()));
+
+    expect(shareCalendar).toHaveBeenCalledWith('cal-1', 'new@example.com');
+    expect(redirectTo).toHaveBeenCalledWith('/calendars?notice=shared');
+  });
+
+  it('does nothing for a blank email', async () => {
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+
+    await act(() => result.current.sharing.calendars[0].onShare(submitEvent()));
+
+    expect(shareCalendar).not.toHaveBeenCalled();
+  });
+
+  it('shows why a share was refused', async () => {
+    vi.mocked(shareCalendar).mockRejectedValue(
+      new Error('Nobody with that email uses Bell yet.'),
+    );
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+
+    act(() =>
+      result.current.sharing.calendars[0].onEmailChange(
+        input('ghost@example.com'),
+      ),
+    );
+    await act(() => result.current.sharing.calendars[0].onShare(submitEvent()));
+
+    expect(result.current.sharing.showError).toBe(true);
+    expect(result.current.sharing.error).toBe(
+      'Nobody with that email uses Bell yet.',
+    );
+    expect(redirectTo).not.toHaveBeenCalled();
+  });
+
+  it('stops sharing with a teammate', async () => {
+    vi.mocked(removeCalendarShare).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+
+    await act(() =>
+      result.current.sharing.calendars[0].recipients[0].onRemove(),
+    );
+
+    expect(removeCalendarShare).toHaveBeenCalledWith('cal-1', TEAMMATE_ID);
+    expect(redirectTo).toHaveBeenCalledWith('/calendars?notice=unshared');
+  });
+
+  it('removes a calendar someone shared with me', async () => {
+    vi.mocked(removeCalendarShare).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useCalendarsClient(SHARED_PROPS));
+
+    await act(() => result.current.sharing.sharedWithMe[0].onRemove());
+
+    expect(removeCalendarShare).toHaveBeenCalledWith('cal-team', VIEWER_ID);
   });
 });

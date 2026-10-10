@@ -18,7 +18,12 @@ export type AgendaEventRow = Pick<
   | 'previous_starts_at'
 >;
 
-export type AgendaCalendarRow = Pick<CalendarRow, 'id' | 'label' | 'color'>;
+export interface AgendaCalendarRow extends Pick<
+  CalendarRow,
+  'id' | 'label' | 'color'
+> {
+  shared: boolean;
+}
 
 export interface AgendaRows {
   events: AgendaEventRow[];
@@ -59,6 +64,7 @@ export interface AgendaBadge {
   key: string;
   label: string;
   color: string;
+  shared: boolean;
 }
 
 export interface AgendaCardView {

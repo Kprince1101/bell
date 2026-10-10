@@ -1,10 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { CalendarsClient } from '@/app/(app)/calendars/CalendarsClient';
-import { saveCalendarChoices } from '@/lib/calendarsApi';
+import { saveCalendarChoices, shareCalendar } from '@/lib/calendarsApi';
+import { NO_SHARING, SHARING } from '@/test-utils/sharingFakes';
 
 vi.mock('@/lib/calendarsApi', () => ({
   saveCalendarChoices: vi.fn(),
   disconnectGoogleAccount: vi.fn(),
+  shareCalendar: vi.fn(),
+  removeCalendarShare: vi.fn(),
 }));
 vi.mock('@/lib/navigation', () => ({ redirectTo: vi.fn() }));
 
@@ -38,17 +41,32 @@ const ACCOUNTS = [
 
 describe('CalendarsClient', () => {
   it('offers to connect when nothing is connected yet', () => {
-    render(<CalendarsClient accounts={[]} error={null} notice={null} />);
+    render(
+      <CalendarsClient
+        accounts={[]}
+        sharing={NO_SHARING}
+        error={null}
+        notice={null}
+      />,
+    );
 
     expect(
       screen.getByRole('link', { name: 'Connect a Google account' }),
     ).toHaveAttribute('href', '/api/google/connect');
     expect(screen.getByText('No Google accounts yet')).toBeInTheDocument();
+    expect(
+      screen.getByText('Include a calendar above to share it.'),
+    ).toBeInTheDocument();
   });
 
   it('shows each calendar with its health, visibly', () => {
     render(
-      <CalendarsClient accounts={ACCOUNTS} error="Bad thing" notice={null} />,
+      <CalendarsClient
+        accounts={ACCOUNTS}
+        sharing={NO_SHARING}
+        error="Bad thing"
+        notice={null}
+      />,
     );
 
     expect(screen.getByText('me@client.com')).toBeInTheDocument();
@@ -70,7 +88,14 @@ describe('CalendarsClient', () => {
 
   it('saves after a change', () => {
     vi.mocked(saveCalendarChoices).mockResolvedValue(undefined);
-    render(<CalendarsClient accounts={ACCOUNTS} error={null} notice={null} />);
+    render(
+      <CalendarsClient
+        accounts={ACCOUNTS}
+        sharing={NO_SHARING}
+        error={null}
+        notice={null}
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText('Label for me@client.com'), {
       target: { value: 'Client A' },
@@ -86,5 +111,32 @@ describe('CalendarsClient', () => {
         color: '#4285f4',
       },
     ]);
+  });
+
+  it('shows who a calendar is shared with and shares it with another teammate', () => {
+    vi.mocked(shareCalendar).mockResolvedValue(undefined);
+    render(
+      <CalendarsClient
+        accounts={ACCOUNTS}
+        sharing={SHARING}
+        error={null}
+        notice={null}
+      />,
+    );
+
+    expect(screen.getByText('teammate@example.com')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Stop sharing' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Shared with you')).toBeInTheDocument();
+    expect(screen.getByText('Team standups')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Share Client with'), {
+      target: { value: 'second@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+    expect(shareCalendar).toHaveBeenCalledWith('cal-1', 'second@example.com');
   });
 });

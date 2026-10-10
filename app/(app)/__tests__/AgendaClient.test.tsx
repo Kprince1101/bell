@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client';
 import {
   AGENDA_NOW,
   CLIENT,
+  PERSONAL,
+  TEAM,
   agendaEvent,
   agendaRows,
 } from '@/test-utils/agendaFakes';
@@ -75,6 +77,32 @@ describe('AgendaClient', () => {
     expect(
       within(standups[0]).getByRole('list', { name: 'Calendars' }),
     ).toHaveTextContent('PersonalClient');
+  });
+
+  it('badges a meeting from a calendar shared with me as shared', () => {
+    render(
+      <AgendaClient
+        {...PROPS}
+        initialRows={agendaRows(
+          [
+            agendaEvent({
+              id: 'team-1',
+              title: 'Planning',
+              calendar_id: TEAM.id,
+            }),
+          ],
+          [PERSONAL, TEAM],
+        )}
+      />,
+    );
+    const todayList = screen.getByRole('region', { name: 'Today' });
+    const planning = within(todayList).getByRole('article', {
+      name: 'Planning',
+    });
+
+    expect(
+      within(planning).getByRole('list', { name: 'Calendars' }),
+    ).toHaveTextContent('Team standups· shared');
   });
 
   it('shows both times and a visible flag for an invite in another zone', () => {

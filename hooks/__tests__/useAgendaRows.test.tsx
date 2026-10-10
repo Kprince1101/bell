@@ -3,7 +3,13 @@ import { useAgendaRows } from '@/hooks/useAgendaRows';
 import { loadAgendaRows } from '@/lib/agenda/read';
 import { AGENDA_REFRESH_DELAY_MS } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/client';
-import { AGENDA_NOW, agendaEvent, agendaRows } from '@/test-utils/agendaFakes';
+import {
+  AGENDA_NOW,
+  PERSONAL,
+  TEAM,
+  agendaEvent,
+  agendaRows,
+} from '@/test-utils/agendaFakes';
 import { createRealtimeFake } from '@/test-utils/realtimeFake';
 import { USER_ID } from '@/test-utils/supabaseFake';
 
@@ -16,7 +22,7 @@ const REFRESHED = agendaRows([
   agendaEvent({ id: 'evt-2', title: 'Added' }),
 ]);
 
-const setup = () => {
+const setup = (initialRows = INITIAL) => {
   const realtime = createRealtimeFake();
   vi.mocked(createClient).mockReturnValue(
     realtime.client as unknown as ReturnType<typeof createClient>,
@@ -25,7 +31,7 @@ const setup = () => {
     useAgendaRows({
       userId: USER_ID,
       timeZone: 'America/Chicago',
-      initialRows: INITIAL,
+      initialRows,
     }),
   );
   return { realtime, ...hook };
@@ -68,6 +74,28 @@ describe('useAgendaRows', () => {
     expect(result.current.isLive).toBe(true);
     act(() => realtime.emitStatus('CHANNEL_ERROR'));
     expect(result.current.isLive).toBe(false);
+  });
+
+  it('also listens to calendars shared with the user', () => {
+    const { realtime } = setup(agendaRows([agendaEvent()], [PERSONAL, TEAM]));
+
+    expect(realtime.channel.on).toHaveBeenCalledTimes(2);
+    expect(realtime.channel.on).toHaveBeenCalledWith(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'bell',
+        table: 'events',
+        filter: `calendar_id=in.(${TEAM.id})`,
+      },
+      expect.any(Function),
+    );
+  });
+
+  it('listens only to the user’s own events when nothing is shared', () => {
+    const { realtime } = setup();
+
+    expect(realtime.channel.on).toHaveBeenCalledTimes(1);
   });
 
   it('reloads the agenda once after a burst of changes', async () => {

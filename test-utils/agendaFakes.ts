@@ -10,12 +10,21 @@ export const PERSONAL: AgendaCalendarRow = {
   id: 'cal-personal',
   label: 'Personal',
   color: '#4285f4',
+  shared: false,
 };
 
 export const CLIENT: AgendaCalendarRow = {
   id: 'cal-client',
   label: 'Client',
   color: '#e8a33d',
+  shared: false,
+};
+
+export const TEAM: AgendaCalendarRow = {
+  id: 'cal-team',
+  label: 'Team standups',
+  color: '#0b8043',
+  shared: true,
 };
 
 export const agendaEvent = (

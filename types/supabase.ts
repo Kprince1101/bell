@@ -72,6 +72,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      calendar_shares: {
+        Row: {
+          calendar_id: string;
+          created_at: string;
+          created_by: string;
+          shared_with_user_id: string;
+        };
+        Insert: {
+          calendar_id: string;
+          created_at?: string;
+          created_by: string;
+          shared_with_user_id: string;
+        };
+        Update: {
+          calendar_id?: string;
+          created_at?: string;
+          created_by?: string;
+          shared_with_user_id?: string;
+        };
+        Relationships: [];
+      };
       calendars: {
         Row: {
           account_id: string;
@@ -505,6 +526,34 @@ export type Database = {
       set_calendar_quiet: {
         Args: { p_user_id: string; p_calendar_id: string; p_quiet: boolean };
         Returns: boolean;
+      };
+      share_calendar: {
+        Args: { p_user_id: string; p_calendar_id: string; p_email: string };
+        Returns: string;
+      };
+      unshare_calendar: {
+        Args: {
+          p_user_id: string;
+          p_calendar_id: string;
+          p_shared_with: string;
+        };
+        Returns: boolean;
+      };
+      shared_with_me: {
+        Args: never;
+        Returns: { id: string; label: string; color: string }[];
+      };
+      my_shares: {
+        Args: never;
+        Returns: {
+          calendar_id: string;
+          shared_with_user_id: string;
+          email: string;
+        }[];
+      };
+      calendar_recipients: {
+        Args: { p_calendar_id: string };
+        Returns: { user_id: string }[];
       };
       set_channel_active: {
         Args: { p_user_id: string; p_kind: string; p_active: boolean };

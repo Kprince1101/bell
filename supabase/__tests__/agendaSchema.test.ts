@@ -30,7 +30,7 @@ describe('0003_agenda order', () => {
       'select name from bell.migrations order by applied_at, name',
     );
 
-    expect(rows.map((row) => row.name)).toEqual([
+    expect(rows.map((row) => row.name).slice(0, 3)).toEqual([
       '0001_bell.sql',
       '0002_google_calendars.sql',
       '0003_agenda.sql',

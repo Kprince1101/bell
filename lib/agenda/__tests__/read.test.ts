@@ -33,7 +33,10 @@ const queryFor = (result: Result) => {
   return chain;
 };
 
-const fakeClient = (results: Record<string, Result[]>) => {
+const fakeClient = (
+  results: Record<string, Result[]>,
+  sharedWithMe: Result = { data: [], error: null },
+) => {
   const queries: Record<string, ReturnType<typeof queryFor>[]> = {};
   const client = {
     from: vi.fn((table: string) => {
@@ -42,8 +45,19 @@ const fakeClient = (results: Record<string, Result[]>) => {
       queries[table] = [...(queries[table] ?? []), query];
       return query;
     }),
+    rpc: vi.fn(async () => sharedWithMe),
   };
-  return { client: client as unknown as AgendaReader, queries };
+  return {
+    client: client as unknown as AgendaReader,
+    queries,
+    rpc: client.rpc,
+  };
+};
+
+const SHARED_ROW = {
+  id: '55555555-5555-5555-5555-555555555555',
+  label: 'Team standups',
+  color: '#0b8043',
 };
 
 const RANGE = {
@@ -70,12 +84,45 @@ describe('loadAgendaRows', () => {
     );
     expect(queries.events[0].calls).toEqual(
       expect.arrayContaining([
-        ['eq', 'user_id', USER_ID],
         ['in', 'calendar_id', [PERSONAL.id]],
         ['lt', 'starts_at', RANGE.to],
         ['gt', 'ends_at', RANGE.from],
       ]),
     );
+  });
+
+  it('adds calendars shared with the user, marked shared, and reads their events too', async () => {
+    const { client, queries, rpc } = fakeClient(
+      {
+        calendars: [{ data: [PERSONAL], error: null }],
+        events: [{ data: [agendaEvent()], error: null }],
+      },
+      { data: [SHARED_ROW], error: null },
+    );
+
+    const rows = await loadAgendaRows(client, USER_ID, RANGE);
+
+    expect(rpc).toHaveBeenCalledWith('shared_with_me');
+    expect(rows.calendars).toEqual([PERSONAL, { ...SHARED_ROW, shared: true }]);
+    expect(queries.events[0].calls).toEqual(
+      expect.arrayContaining([
+        ['in', 'calendar_id', [PERSONAL.id, SHARED_ROW.id]],
+      ]),
+    );
+  });
+
+  it('shows a shared calendar even when the user has none of their own', async () => {
+    const { client } = fakeClient(
+      {
+        calendars: [{ data: [], error: null }],
+        events: [{ data: [], error: null }],
+      },
+      { data: [SHARED_ROW], error: null },
+    );
+
+    const rows = await loadAgendaRows(client, USER_ID, RANGE);
+
+    expect(rows.calendars).toEqual([{ ...SHARED_ROW, shared: true }]);
   });
 
   it('skips the events query when no calendar is shown', async () => {

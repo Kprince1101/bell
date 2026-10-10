@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { nextAgendaVisit } from '@/lib/agenda/changes';
+import { loadSharedWithMe } from '@/lib/calendars/sharing';
 import type { AgendaRows, AgendaVisit, TimeRange } from '@/types/agenda';
 import type { Database } from '@/types/supabase';
 
@@ -10,10 +11,7 @@ export const AGENDA_EVENT_COLUMNS =
 
 export const AGENDA_CALENDAR_COLUMNS = 'id, label, color';
 
-export const loadAgendaCalendars = async (
-  client: AgendaReader,
-  userId: string,
-): Promise<AgendaRows['calendars']> => {
+const loadOwnCalendars = async (client: AgendaReader, userId: string) => {
   const { data, error } = await client
     .from('calendars')
     .select(AGENDA_CALENDAR_COLUMNS)
@@ -23,6 +21,20 @@ export const loadAgendaCalendars = async (
     .order('label');
   if (error) throw error;
   return data;
+};
+
+export const loadAgendaCalendars = async (
+  client: AgendaReader,
+  userId: string,
+): Promise<AgendaRows['calendars']> => {
+  const [own, shared] = await Promise.all([
+    loadOwnCalendars(client, userId),
+    loadSharedWithMe(client),
+  ]);
+  return [
+    ...own.map((calendar) => ({ ...calendar, shared: false })),
+    ...shared.map((calendar) => ({ ...calendar, shared: true })),
+  ];
 };
 
 export const loadAgendaRows = async (
@@ -35,7 +47,6 @@ export const loadAgendaRows = async (
   const { data, error } = await client
     .from('events')
     .select(AGENDA_EVENT_COLUMNS)
-    .eq('user_id', userId)
     .in(
       'calendar_id',
       calendars.map((calendar) => calendar.id),

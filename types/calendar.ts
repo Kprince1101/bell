@@ -100,8 +100,30 @@ export interface AccountView {
   calendars: CalendarView[];
 }
 
+export interface ShareRecipientView {
+  userId: string;
+  email: string;
+}
+
+export interface SharedCalendarView {
+  calendarId: string;
+  label: string;
+  color: string;
+}
+
+export interface OwnedShareView extends SharedCalendarView {
+  recipients: ShareRecipientView[];
+}
+
+export interface SharingView {
+  userId: string;
+  owned: OwnedShareView[];
+  sharedWithMe: SharedCalendarView[];
+}
+
 export interface CalendarsClientProps {
   accounts: AccountView[];
+  sharing: SharingView;
   error: string | null;
   notice: string | null;
 }

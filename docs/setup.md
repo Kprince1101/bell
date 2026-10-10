@@ -226,6 +226,19 @@ The agenda at `/` shows today and the next 7 days from every included calendar, 
    4. Move, cancel or create an event in Google Calendar. Within seconds, without reloading, the card shows **Moved** with the old time struck through, **Cancelled** with the title struck through, or **New**.
    5. Calendars → tick **Pause** on one calendar → Save: its events leave the agenda; untick to bring them back.
 
+## 11. Bell 4: sharing a calendar with a teammate
+
+A share is a row in `bell.calendar_shares` (calendar, the teammate it is shared with, who shared it), never a copy of the events. The sharer's watch channel keeps the events fresh; the teammate's agenda and scheduler read "my calendars plus calendars shared with me". The teammate never sees the sharer's Google account, refresh token or other calendars: they get the shared calendar's label and color through `bell.shared_with_me()` and its events through an RLS policy on `bell.events`.
+
+1. **Migration 0006.** `npm run db:migrate` prints `applied 0006_calendar_shares.sql` (or the **Migrate** workflow does it on merge). It adds `bell.calendar_shares`, the shared-events read policy, per-person notification rows (`unique (event_id, user_id, step, channel)`), and extends `bell.delete_me()` to drop every share the user made or received (it still returns `false`, keeping the auth user, for someone with a Commander profile). Everything it creates lives in the `bell` schema; realtime needs nothing new.
+2. **Invite the teammate.** Signed in as the owner, open **Invites** and add their email (section 2). They sign in once (Bell 0), keeping their existing login if they already use Commander, connect their own Google accounts if they have any (Bell 1), and set up their own Slack, Pushover, SMS and call channels under Notifications (Bell 3).
+3. **Prove it.**
+   1. Signed in as the sharer: Calendars → **Sharing** → type the teammate's email next to an included calendar → **Share**. The calendar now lists their email with **Stop sharing**.
+   2. Signed in as the teammate: the agenda shows that calendar's meetings badged `<label> · shared`, and nothing from the sharer's other calendars. Calendars → **Sharing** → **Shared with you** lists it. The sharer's Google account appears nowhere.
+   3. On the shared calendar, create a meeting 35 minutes out. Each person gets their own Slack DM and push on their own channels and in their own time zone; acknowledging on one side does not silence the other. Marking the calendar quiet silences only the sharer.
+   4. The sharer presses **Stop sharing** (or the teammate presses **Remove**): the meetings leave the teammate's agenda and nothing more rings for them; `select result, error from bell.notifications where user_id = '<teammate id>' order by created_at desc limit 7;` shows `cancelled` / `share removed`.
+   5. If the sharer deletes their Bell account (Account → Delete), the shares, the shared events and every notification queued for the teammate go with it.
+
 ## Conventions
 
 - **Migrations** live in `supabase/migrations/NNNN_name.sql`, create objects only in the `bell` schema, and are applied by `npm run db:migrate`.

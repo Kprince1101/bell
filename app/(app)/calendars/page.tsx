@@ -1,3 +1,4 @@
+import { loadSharingView } from '@/lib/calendars/sharing';
 import {
   loadCalendarsView,
   resolveCalendarMessages,
@@ -13,12 +14,20 @@ interface CalendarsPageProps {
 
 const CalendarsPage = async ({ searchParams }: CalendarsPageProps) => {
   const user = await requireBellUser();
-  const accounts = await loadCalendarsView(
-    await createClient(),
-    user.time_zone,
-  );
+  const supabase = await createClient();
+  const [accounts, sharing] = await Promise.all([
+    loadCalendarsView(supabase, user.time_zone),
+    loadSharingView(supabase, user.id),
+  ]);
   const { error, notice } = resolveCalendarMessages(await searchParams);
-  return <CalendarsClient accounts={accounts} error={error} notice={notice} />;
+  return (
+    <CalendarsClient
+      accounts={accounts}
+      sharing={sharing}
+      error={error}
+      notice={notice}
+    />
+  );
 };
 
 export default CalendarsPage;

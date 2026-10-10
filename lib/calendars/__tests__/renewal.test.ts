@@ -9,6 +9,7 @@ import {
   calendarRow,
   createFakeServices,
 } from '@/test-utils/calendarFakes';
+import { createFakeNotifyServices } from '@/test-utils/notifyFakes';
 
 const EXPIRING = calendarRow({
   channel_expires_at: '2026-10-11T06:00:00.000Z',
@@ -69,7 +70,7 @@ describe('renewChannels', () => {
       calendarRow({ id: SECOND_ID }),
     ]);
 
-    await runTick(services);
+    await runTick(services, createFakeNotifyServices().services);
 
     expect(google.listEvents).not.toHaveBeenCalled();
     expect(repo.applySync).not.toHaveBeenCalled();

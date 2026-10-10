@@ -21,13 +21,23 @@ export const requireUser = async (): Promise<AuthedContext> => {
   return { supabase, user };
 };
 
+const INVALID_REQUEST = 'Invalid request';
+
+const invalidMessage = (error: z.ZodError, explain: boolean): string => {
+  if (!explain) return INVALID_REQUEST;
+  return error.issues[0]?.message ?? INVALID_REQUEST;
+};
+
 export const parseBody = async <Schema extends z.ZodType>(
   request: Request,
   schema: Schema,
+  { explain = false }: { explain?: boolean } = {},
 ): Promise<z.infer<Schema>> => {
   const raw: unknown = await request.json().catch(() => null);
   const parsed = schema.safeParse(raw);
-  if (!parsed.success) throw new ApiError('Invalid request', 400);
+  if (!parsed.success) {
+    throw new ApiError(invalidMessage(parsed.error, explain), 400);
+  }
   return parsed.data;
 };
 

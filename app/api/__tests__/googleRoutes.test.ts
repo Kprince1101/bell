@@ -7,6 +7,7 @@ import { GET as tickGet, POST as tickPost } from '@/app/api/tick/route';
 import { POST as webhook } from '@/app/api/webhooks/google/route';
 import { bellServices } from '@/lib/calendars/bellServices';
 import { signValue } from '@/lib/crypto/tokenCipher';
+import { notifyServices } from '@/lib/notify/notifyServices';
 import { createClient } from '@/lib/supabase/server';
 import {
   ACCOUNT_ID,
@@ -15,14 +16,18 @@ import {
   TEST_CONFIG,
   createFakeServices,
 } from '@/test-utils/calendarFakes';
+import { createFakeNotifyServices } from '@/test-utils/notifyFakes';
 import { USER_ID, createSupabaseFake } from '@/test-utils/supabaseFake';
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 vi.mock('@/lib/calendars/bellServices', () => ({ bellServices: vi.fn() }));
+vi.mock('@/lib/notify/notifyServices', () => ({ notifyServices: vi.fn() }));
 
 const setup = (user: { id: string } | null = { id: USER_ID }) => {
   const fakes = createFakeServices();
+  const notify = createFakeNotifyServices();
   vi.mocked(bellServices).mockReturnValue(fakes.services);
+  vi.mocked(notifyServices).mockReturnValue(notify.services);
   vi.mocked(createClient).mockResolvedValue(
     createSupabaseFake({ user }).client,
   );
@@ -89,6 +94,13 @@ describe('/api/tick', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
+      notifications: {
+        materialized: 0,
+        due: 0,
+        sent: 0,
+        failed: 0,
+        fallbacks: 0,
+      },
       channels: { renewed: [], failed: [], pushStopped: [] },
     });
     expect(repo.calendarsDueForRenewal).toHaveBeenCalled();

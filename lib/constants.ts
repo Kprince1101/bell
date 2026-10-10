@@ -41,6 +41,33 @@ export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {
     'Connecting that Google account did not complete. Please try again.',
 };
 
+export const NOTIFICATIONS_PATH = '/notifications';
+
+export const NOTIFY_ERROR_MESSAGES: Record<string, string> = {
+  'slack-denied': 'Slack access was not granted, so nothing was connected.',
+  'slack-failed': 'Connecting Slack did not complete. Please try again.',
+};
+
+export const NOTIFY_NOTICE_MESSAGES: Record<string, string> = {
+  'slack-connected': 'Slack connected. Bell just sent you a test DM.',
+  'channel-saved':
+    'Saved and switched on. Use Test to make sure it reaches you.',
+};
+
+export const SLACK_CONNECT_PATH = '/api/slack/connect';
+
+export const CHANNEL_LABELS: Record<string, string> = {
+  slack: 'Slack DM',
+  pushover: 'Pushover',
+  sms: 'Text message',
+  voice: 'Phone call',
+};
+
+export const CHANNEL_NOT_SET_UP = 'Set this channel up first.';
+
+export const CHANNEL_TEST_FAILED =
+  'The test did not go through. Check the setting and try again.';
+
 export const CALENDAR_NOTICE_MESSAGES: Record<string, string> = {
   connected:
     'Google account connected. Pick the calendars Bell should include.',

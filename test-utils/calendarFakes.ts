@@ -50,6 +50,7 @@ export const calendarRow = (
   last_sync_at: '2026-10-10T11:00:00.000Z',
   last_error: null,
   fail_count: 0,
+  quiet: false,
   created_at: '2026-10-01T00:00:00.000Z',
   ...overrides,
 });
@@ -63,7 +64,7 @@ export const eventsPage = (
   ...overrides,
 });
 
-type Fake<Shape> = {
+export type Fake<Shape> = {
   [Key in keyof Shape]: Shape[Key] extends (...args: infer Args) => infer Out
     ? ReturnType<typeof vi.fn<(...args: Args) => Out>>
     : never;

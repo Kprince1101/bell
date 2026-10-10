@@ -107,8 +107,12 @@ describe('0001_bell', () => {
       'accounts',
       'allowlist',
       'calendars',
+      'channel_secrets',
+      'channels',
       'events',
       'migrations',
+      'notifications',
+      'slack_installs',
       'users',
     ]);
     await db.close();

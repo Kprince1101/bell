@@ -1,19 +1,20 @@
 import { connectGoogleAccount } from '@/lib/calendars/connect';
 import type { BellServices } from '@/lib/calendars/services';
 import { CALENDARS_PATH } from '@/lib/constants';
-import { safeEqual } from '@/lib/crypto/tokenCipher';
+import {
+  OAUTH_STATE_COOKIE_OPTIONS,
+  completeOAuthCallback,
+} from '@/lib/oauthCallback';
+import type { ConnectOutcome, OAuthCallback } from '@/lib/oauthCallback';
+
+export type { ConnectOutcome } from '@/lib/oauthCallback';
 
 export const GOOGLE_STATE_COOKIE = 'bell_google_state';
 
 export const GOOGLE_STATE_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'lax' as const,
+  ...OAUTH_STATE_COOKIE_OPTIONS,
   path: '/api/google',
-  maxAge: 600,
 };
-
-export type ConnectOutcome = 'connected' | 'denied' | 'failed';
 
 export const CONNECT_REDIRECTS: Record<ConnectOutcome, string> = {
   connected: `${CALENDARS_PATH}?notice=connected`,
@@ -21,27 +22,14 @@ export const CONNECT_REDIRECTS: Record<ConnectOutcome, string> = {
   failed: `${CALENDARS_PATH}?error=connect-failed`,
 };
 
-export interface ConnectCallback {
+export interface ConnectCallback extends OAuthCallback {
   userId: string;
-  code: string | null;
-  state: string | null;
-  expectedState: string | undefined;
-  error: string | null;
 }
 
-export const completeGoogleConnect = async (
+export const completeGoogleConnect = (
   services: BellServices,
-  { userId, code, state, expectedState, error }: ConnectCallback,
-): Promise<ConnectOutcome> => {
-  if (error) return 'denied';
-  if (!code || !state || !expectedState || !safeEqual(expectedState, state)) {
-    return 'failed';
-  }
-  try {
-    await connectGoogleAccount(services, userId, code);
-    return 'connected';
-  } catch (err) {
-    console.error(err);
-    return 'failed';
-  }
-};
+  { userId, ...callback }: ConnectCallback,
+): Promise<ConnectOutcome> =>
+  completeOAuthCallback(callback, (code) =>
+    connectGoogleAccount(services, userId, code),
+  );

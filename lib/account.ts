@@ -5,6 +5,10 @@ import type { Database } from '@/types/supabase';
 
 export type AdminClient = SupabaseClient<Database, 'bell'>;
 
+export interface DeleteAccountResult {
+  authUserRemoved: boolean;
+}
+
 export const updateTimeZone = async (
   supabase: BellClient,
   userId: string,
@@ -24,12 +28,15 @@ export const deleteAccount = async (
   supabase: BellClient,
   admin: AdminClient,
   userId: string,
-): Promise<void> => {
-  const { error } = await supabase.rpc('delete_me');
+): Promise<DeleteAccountResult> => {
+  const { data: removeAuthUser, error } = await supabase.rpc('delete_me');
   if (error) throw error;
 
-  const { error: authError } = await admin.auth.admin.deleteUser(userId);
-  if (authError) throw authError;
+  if (removeAuthUser) {
+    const { error: authError } = await admin.auth.admin.deleteUser(userId);
+    if (authError) throw authError;
+  }
 
   await supabase.auth.signOut({ scope: 'local' });
+  return { authUserRemoved: Boolean(removeAuthUser) };
 };

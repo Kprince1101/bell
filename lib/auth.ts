@@ -1,10 +1,13 @@
+import { AuthError } from '@supabase/supabase-js';
 import {
   LOGIN_ERROR_MESSAGES,
   LOGIN_NOTICE_MESSAGES,
   NOT_INVITED_CODE,
-  NOT_INVITED_MESSAGE,
+  NOT_INVITED_COPY,
+  NO_ACCOUNT_AUTH_CODES,
   PUBLIC_PATH_PREFIXES,
 } from '@/lib/constants';
+import { getErrorMessage } from '@/lib/errors';
 import type { BellClient } from '@/lib/supabase/server';
 import { resolveTimeZone } from '@/lib/timeZone';
 import type { Database } from '@/types/supabase';
@@ -35,14 +38,21 @@ export const callbackUrl = (origin: string, timeZone: string): string => {
   return url.toString();
 };
 
-export const isNotInvitedError = (description: string | null): boolean =>
-  Boolean(description?.includes(NOT_INVITED_MESSAGE));
+export const isNoAccountError = (code: string | null | undefined): boolean =>
+  NO_ACCOUNT_AUTH_CODES.includes(code ?? '');
+
+export const magicLinkErrorMessage = (error: unknown): string => {
+  if (error instanceof AuthError && isNoAccountError(error.code)) {
+    return NOT_INVITED_COPY;
+  }
+  return getErrorMessage(error);
+};
 
 export const completeSignIn = async (
   supabase: BellClient,
   params: URLSearchParams,
 ): Promise<SignInOutcome> => {
-  if (isNotInvitedError(params.get('error_description'))) return 'not-invited';
+  if (isNoAccountError(params.get('error_code'))) return 'not-invited';
 
   const code = params.get('code');
   if (!code) return 'failed';

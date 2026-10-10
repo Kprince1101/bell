@@ -2,9 +2,10 @@ import Link from 'next/link';
 
 interface AppHeaderProps {
   email: string;
+  showInvites: boolean;
 }
 
-export const AppHeader = ({ email }: AppHeaderProps) => (
+export const AppHeader = ({ email, showInvites }: AppHeaderProps) => (
   <header className="flex items-center justify-between border-b border-border px-6 py-4">
     <Link href="/" className="text-xl font-bold text-accent">
       Bell
@@ -13,6 +14,11 @@ export const AppHeader = ({ email }: AppHeaderProps) => (
       <Link href="/" className="hover:text-accent">
         Agenda
       </Link>
+      {showInvites && (
+        <Link href="/invites" className="hover:text-accent">
+          Invites
+        </Link>
+      )}
       <Link href="/account" className="hover:text-accent">
         Account
       </Link>

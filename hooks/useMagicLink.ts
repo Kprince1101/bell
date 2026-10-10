@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { callbackUrl } from '@/lib/auth';
-import { getErrorMessage } from '@/lib/errors';
+import { callbackUrl, magicLinkErrorMessage } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/client';
 import { browserTimeZone } from '@/lib/timeZone';
 
@@ -28,6 +27,7 @@ export const useMagicLink = () => {
       const { error } = await createClient().auth.signInWithOtp({
         email: email.trim(),
         options: {
+          shouldCreateUser: false,
           emailRedirectTo: callbackUrl(
             window.location.origin,
             browserTimeZone(),
@@ -37,7 +37,7 @@ export const useMagicLink = () => {
       if (error) throw error;
       setSentTo(email.trim());
     } catch (err) {
-      setLinkError(getErrorMessage(err));
+      setLinkError(magicLinkErrorMessage(err));
     } finally {
       setIsSending(false);
     }

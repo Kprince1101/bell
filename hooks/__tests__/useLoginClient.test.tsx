@@ -1,6 +1,8 @@
+import { AuthError } from '@supabase/supabase-js';
 import { act, renderHook } from '@testing-library/react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useLoginClient } from '@/hooks/useLoginClient';
+import { NOT_INVITED_COPY } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/client';
 
 vi.mock('@/lib/supabase/client', () => ({ createClient: vi.fn() }));
@@ -50,7 +52,10 @@ describe('useLoginClient', () => {
 
     expect(auth.signInWithOtp).toHaveBeenCalledWith({
       email: 'me@example.com',
-      options: { emailRedirectTo: expectedCallback() },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: expectedCallback(),
+      },
     });
     expect(result.current.noticeMessage).toBe(
       'Check me@example.com for a sign-in link.',
@@ -62,7 +67,7 @@ describe('useLoginClient', () => {
     const auth = authFake();
     auth.signInWithOtp.mockResolvedValue({
       data: {},
-      error: new Error('This email is not invited to Bell.'),
+      error: new AuthError('Signups not allowed for otp', 422, 'otp_disabled'),
     });
     const { result } = renderHook(() =>
       useLoginClient({ error: null, notice: null }),
@@ -70,9 +75,7 @@ describe('useLoginClient', () => {
 
     await act(() => result.current.handleMagicLink(submitEvent()));
 
-    expect(result.current.errorMessage).toBe(
-      'This email is not invited to Bell.',
-    );
+    expect(result.current.errorMessage).toBe(NOT_INVITED_COPY);
     expect(result.current.showNotice).toBe(false);
   });
 

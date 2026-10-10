@@ -25,13 +25,31 @@ describe('GET /auth/callback', () => {
     });
   });
 
-  it('sends an uninvited user back to login with a reason', async () => {
-    useFake({ rpcError: { code: '42501', message: 'not invited' } });
+  it('signs out an existing account that is not on the allowlist', async () => {
+    const fake = useFake({
+      rpcError: { code: '42501', message: 'not invited' },
+    });
 
     const response = await GET(
       new Request('https://bell.test/auth/callback?code=abc'),
     );
 
+    expect(fake.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(response.headers.get('location')).toBe(
+      'https://bell.test/login?error=not-invited',
+    );
+  });
+
+  it('refuses a Google account that has no auth user, since signups are off', async () => {
+    const fake = useFake();
+
+    const response = await GET(
+      new Request(
+        'https://bell.test/auth/callback?error=access_denied&error_code=signup_disabled',
+      ),
+    );
+
+    expect(fake.auth.exchangeCodeForSession).not.toHaveBeenCalled();
     expect(response.headers.get('location')).toBe(
       'https://bell.test/login?error=not-invited',
     );

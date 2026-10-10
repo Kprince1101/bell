@@ -1,12 +1,37 @@
+import { AuthError } from '@supabase/supabase-js';
 import {
   SIGN_IN_REDIRECTS,
   callbackUrl,
   completeSignIn,
   getBellUser,
   isPublicPath,
+  magicLinkErrorMessage,
   resolveLoginMessages,
 } from '@/lib/auth';
 import { BELL_USER, createSupabaseFake } from '@/test-utils/supabaseFake';
+
+describe('magicLinkErrorMessage', () => {
+  it('turns a no-account auth error into the not-invited copy', () => {
+    expect(
+      magicLinkErrorMessage(
+        new AuthError('Signups not allowed for otp', 422, 'otp_disabled'),
+      ),
+    ).toMatch(/not invited/);
+  });
+
+  it('passes other errors through', () => {
+    expect(
+      magicLinkErrorMessage(
+        new AuthError(
+          'Email rate limit exceeded',
+          429,
+          'over_email_send_rate_limit',
+        ),
+      ),
+    ).toBe('Email rate limit exceeded');
+    expect(magicLinkErrorMessage(new Error('offline'))).toBe('offline');
+  });
+});
 
 describe('callbackUrl', () => {
   it('carries the browser time zone to the callback', () => {
@@ -28,15 +53,16 @@ describe('completeSignIn', () => {
     expect(fake.auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
-  it('reports a refusal from the signup hook as not invited', async () => {
+  it('reports Google sign-in for an email with no account as not invited', async () => {
     const { client, fake } = createSupabaseFake();
 
     expect(
       await completeSignIn(
         client,
         callback({
-          error: 'server_error',
-          error_description: 'This email is not invited to Bell.',
+          error: 'access_denied',
+          error_code: 'signup_disabled',
+          error_description: 'Signups not allowed for this instance',
         }),
       ),
     ).toBe('not-invited');

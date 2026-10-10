@@ -1,5 +1,4 @@
 import type { PGlite } from '@electric-sql/pglite';
-import { NOT_INVITED_MESSAGE } from '@/lib/constants';
 import { readMigrations, runMigrations } from '@/lib/migrations';
 import type { Database } from '@/types/supabase';
 import {
@@ -57,6 +56,13 @@ const claim = async (db: PGlite, userId: string, timeZone: string) => {
   );
   await actAsOwner(db);
   return rows[0];
+};
+
+const deleteMe = async (db: PGlite): Promise<boolean> => {
+  const { rows } = await db.query<{ remove_auth_user: boolean }>(
+    'select bell.delete_me() as remove_auth_user',
+  );
+  return rows[0].remove_auth_user;
 };
 
 const bellTables = async (db: PGlite): Promise<string[]> => {
@@ -146,13 +152,14 @@ describe('0001_bell', () => {
     await expect(
       db.query('update bell.users set time_zone = $1', ['Nowhere/Land']),
     ).rejects.toThrow('invalid time zone');
-    await expect(db.query('select * from bell.allowlist')).rejects.toThrow();
+    const allowlist = await db.query('select * from bell.allowlist');
     await actAsOwner(db);
     const { rows } = await db.query<UserRow>(
       'select id, time_zone from bell.users order by id',
     );
 
     expect(visible.rows.map((row) => row.id)).toEqual([INVITED]);
+    expect(allowlist.rows).toEqual([]);
     expect(rows).toEqual([
       { id: INVITED, time_zone: 'Asia/Tokyo' },
       { id: NEIGHBOUR, time_zone: 'UTC' },
@@ -196,10 +203,11 @@ describe('0001_bell', () => {
     }
 
     await actAs(db, INVITED);
-    await db.query('select bell.delete_me()');
+    const removeAuthUser = await deleteMe(db);
     await actAsOwner(db);
     await db.query('delete from auth.users where id = $1', [INVITED]);
 
+    expect(removeAuthUser).toBe(true);
     expect(await rowsMentioning(db, INVITED, 'invited@example.com')).toBe(0);
     expect(
       await rowsMentioning(db, NEIGHBOUR, 'neighbour@example.com'),
@@ -215,20 +223,91 @@ describe('0001_bell', () => {
     await db.close();
   });
 
-  it('the signup hook admits only allowlisted emails', async () => {
+  it('delete_me wipes bell rows but keeps the auth user of someone with a public.profiles row', async () => {
     const db = await migratedDb();
-    const decide = async (email: string) => {
-      const { rows } = await db.query<{ result: Record<string, unknown> }>(
-        'select bell.before_user_created($1::jsonb) as result',
-        [JSON.stringify({ user: { email } })],
-      );
-      return rows[0].result;
-    };
+    await db.exec(
+      'create table public.profiles (user_id uuid primary key references auth.users(id))',
+    );
+    await db.query('insert into public.profiles (user_id) values ($1)', [
+      INVITED,
+    ]);
+    await claim(db, INVITED, 'UTC');
 
-    expect(await decide('INVITED@example.com')).toEqual({});
-    expect(await decide('stranger@example.com')).toEqual({
-      error: { http_code: 403, message: NOT_INVITED_MESSAGE },
-    });
+    await actAs(db, INVITED);
+    const removeAuthUser = await deleteMe(db);
+    await actAsOwner(db);
+
+    expect(removeAuthUser).toBe(false);
+    expect(await rowsMentioning(db, INVITED, 'invited@example.com')).toBe(1);
+    const profile = await db.query('select * from public.profiles');
+    expect(profile.rows).toEqual([{ user_id: INVITED }]);
+    await db.close();
+  });
+
+  it('delete_me still removes the auth user when public.profiles has no row for them', async () => {
+    const db = await migratedDb();
+    await db.exec(
+      'create table public.profiles (user_id uuid primary key references auth.users(id))',
+    );
+    await db.query('insert into public.profiles (user_id) values ($1)', [
+      NEIGHBOUR,
+    ]);
+    await claim(db, INVITED, 'UTC');
+
+    await actAs(db, INVITED);
+
+    expect(await deleteMe(db)).toBe(true);
+    await db.close();
+  });
+
+  it('marks only allowlisted owners as owners, and only they can read the allowlist', async () => {
+    const db = await migratedDb();
+    await db.query(
+      "update bell.allowlist set role = 'owner' where email = $1",
+      ['neighbour@example.com'],
+    );
+
+    await actAs(db, NEIGHBOUR);
+    const ownerView = await db.query<{ is_owner: boolean }>(
+      'select bell.is_owner() as is_owner',
+    );
+    const ownerList = await db.query<{ email: string }>(
+      'select email from bell.allowlist order by email',
+    );
+    await actAs(db, INVITED);
+    const memberView = await db.query<{ is_owner: boolean }>(
+      'select bell.is_owner() as is_owner',
+    );
+    const memberList = await db.query('select email from bell.allowlist');
+    await actAs(db, STRANGER);
+    const strangerView = await db.query<{ is_owner: boolean }>(
+      'select bell.is_owner() as is_owner',
+    );
+
+    expect(ownerView.rows[0].is_owner).toBe(true);
+    expect(ownerList.rows.map((row) => row.email)).toEqual([
+      'invited@example.com',
+      'neighbour@example.com',
+    ]);
+    expect(memberView.rows[0].is_owner).toBe(false);
+    expect(memberList.rows).toEqual([]);
+    expect(strangerView.rows[0].is_owner).toBe(false);
+    await db.close();
+  });
+
+  it('cannot be written by signed-in users, owner or not', async () => {
+    const db = await migratedDb();
+    await db.query(
+      "update bell.allowlist set role = 'owner' where email = $1",
+      ['neighbour@example.com'],
+    );
+    await actAs(db, NEIGHBOUR);
+
+    await expect(
+      db.query('insert into bell.allowlist (email) values ($1)', [
+        'new@example.com',
+      ]),
+    ).rejects.toThrow();
     await db.close();
   });
 });

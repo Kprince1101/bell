@@ -16,14 +16,17 @@ export type Database = {
         Row: {
           added_at: string;
           email: string;
+          role: string;
         };
         Insert: {
           added_at?: string;
           email: string;
+          role?: string;
         };
         Update: {
           added_at?: string;
           email?: string;
+          role?: string;
         };
         Relationships: [];
       };
@@ -71,10 +74,6 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      before_user_created: {
-        Args: { event: Json };
-        Returns: Json;
-      };
       claim_account: {
         Args: { p_time_zone: string };
         Returns: {
@@ -87,7 +86,11 @@ export type Database = {
       };
       delete_me: {
         Args: never;
-        Returns: undefined;
+        Returns: boolean;
+      };
+      is_owner: {
+        Args: never;
+        Returns: boolean;
       };
     };
     Enums: {

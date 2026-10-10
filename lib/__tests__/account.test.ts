@@ -13,7 +13,7 @@ describe('deleteAccount', () => {
     const admin = createAdminFake();
     fake.rpc.mockImplementation(async () => {
       order.push('delete_me');
-      return { data: null, error: null };
+      return { data: true, error: null };
     });
     admin.fake.auth.admin.deleteUser.mockImplementation(async () => {
       order.push('deleteUser');
@@ -24,12 +24,25 @@ describe('deleteAccount', () => {
       return { error: null };
     });
 
-    await deleteAccount(client, admin.client, USER_ID);
+    const result = await deleteAccount(client, admin.client, USER_ID);
 
+    expect(result).toEqual({ authUserRemoved: true });
     expect(fake.rpc).toHaveBeenCalledWith('delete_me');
     expect(admin.fake.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
     expect(fake.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(order).toEqual(['delete_me', 'deleteUser', 'signOut']);
+  });
+
+  it('keeps the auth user of someone who also has a Commander profile', async () => {
+    const { client, fake } = createSupabaseFake({ rpcData: false });
+    const admin = createAdminFake();
+
+    const result = await deleteAccount(client, admin.client, USER_ID);
+
+    expect(result).toEqual({ authUserRemoved: false });
+    expect(fake.rpc).toHaveBeenCalledWith('delete_me');
+    expect(admin.fake.auth.admin.deleteUser).not.toHaveBeenCalled();
+    expect(fake.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('keeps the auth user when the bell wipe fails', async () => {
@@ -44,7 +57,7 @@ describe('deleteAccount', () => {
 
   it('surfaces a failed auth deletion', async () => {
     const { client, fake } = createSupabaseFake();
-    const admin = createAdminFake(new Error('auth down'));
+    const admin = createAdminFake({ deleteError: new Error('auth down') });
 
     await expect(deleteAccount(client, admin.client, USER_ID)).rejects.toThrow(
       'auth down',

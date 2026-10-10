@@ -1,4 +1,4 @@
-type MessageTone = 'error' | 'notice';
+import type { MessageTone } from '@/types/ui';
 
 const TONE_CLASSES: Record<MessageTone, string> = {
   error: 'border-danger/40 text-danger',

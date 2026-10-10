@@ -9,6 +9,7 @@ create table bell.migrations (
 
 create table bell.allowlist (
   email text primary key check (email = lower(email)),
+  role text not null default 'member' check (role in ('member', 'owner')),
   added_at timestamptz not null default now()
 );
 
@@ -24,15 +25,34 @@ alter table bell.migrations enable row level security;
 alter table bell.allowlist enable row level security;
 alter table bell.users enable row level security;
 
+create function bell.is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from bell.allowlist a
+    join auth.users u on lower(u.email) = a.email
+    where u.id = auth.uid() and a.role = 'owner'
+  );
+$$;
+
 create policy users_select_own on bell.users
   for select to authenticated using (id = auth.uid());
 
 create policy users_update_own on bell.users
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
+create policy allowlist_select_owner on bell.allowlist
+  for select to authenticated using (bell.is_owner());
+
 revoke all on all tables in schema bell from anon, authenticated;
 grant select on bell.users to authenticated;
 grant update (time_zone) on bell.users to authenticated;
+grant select on bell.allowlist to authenticated;
 grant all on all tables in schema bell to service_role;
 
 create function bell.users_before_write()
@@ -90,7 +110,7 @@ end;
 $$;
 
 create function bell.delete_me()
-returns void
+returns boolean
 language plpgsql
 security definer
 set search_path = ''
@@ -99,6 +119,7 @@ declare
   v_uid uuid := auth.uid();
   v_email text;
   v_table name;
+  v_has_profile boolean := false;
 begin
   if v_uid is null then
     raise exception 'not signed in' using errcode = '28000';
@@ -121,36 +142,22 @@ begin
 
   delete from bell.users where id = v_uid;
   delete from bell.allowlist where email = v_email;
-end;
-$$;
 
-create function bell.before_user_created(event jsonb)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = ''
-as $$
-begin
-  if exists (
-    select 1 from bell.allowlist a where a.email = lower(event -> 'user' ->> 'email')
-  ) then
-    return '{}'::jsonb;
+  if to_regclass('public.profiles') is not null then
+    execute 'select exists (select 1 from public.profiles where user_id = $1)'
+      into v_has_profile
+      using v_uid;
   end if;
 
-  return jsonb_build_object(
-    'error',
-    jsonb_build_object('http_code', 403, 'message', 'This email is not invited to Bell.')
-  );
+  return not v_has_profile;
 end;
 $$;
 
+revoke all on function bell.is_owner() from public, anon;
 revoke all on function bell.users_before_write() from public, anon, authenticated;
 revoke all on function bell.claim_account(text) from public, anon;
 revoke all on function bell.delete_me() from public, anon;
-revoke all on function bell.before_user_created(jsonb) from public, anon, authenticated;
 
+grant execute on function bell.is_owner() to authenticated;
 grant execute on function bell.claim_account(text) to authenticated;
 grant execute on function bell.delete_me() to authenticated;
-grant usage on schema bell to supabase_auth_admin;
-grant execute on function bell.before_user_created(jsonb) to supabase_auth_admin;

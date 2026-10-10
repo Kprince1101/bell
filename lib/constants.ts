@@ -4,18 +4,31 @@ export const DELETE_CONFIRMATION = 'DELETE';
 
 export const NOT_INVITED_CODE = '42501';
 
-export const NOT_INVITED_MESSAGE = 'This email is not invited to Bell.';
+export const NO_ACCOUNT_AUTH_CODES = [
+  'signup_disabled',
+  'otp_disabled',
+  'user_not_found',
+];
+
+export const EMAIL_EXISTS_AUTH_CODE = 'email_exists';
 
 export const PUBLIC_PATH_PREFIXES = ['/login', '/auth/callback'];
 
 export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 
+export const NOT_INVITED_COPY =
+  'That account is not invited to Bell. Ask the owner to add your email.';
+
 export const LOGIN_ERROR_MESSAGES: Record<string, string> = {
-  'not-invited':
-    'That account is not invited to Bell. Ask the owner to add your email.',
+  'not-invited': NOT_INVITED_COPY,
   failed: 'Sign-in did not complete. Please try again.',
 };
 
 export const LOGIN_NOTICE_MESSAGES: Record<string, string> = {
   deleted: 'Your account and everything in it has been deleted.',
+};
+
+export const INVITE_MESSAGES = {
+  notOwner: 'Only the owner can invite people.',
+  invalidEmail: 'Enter a valid email address.',
 };

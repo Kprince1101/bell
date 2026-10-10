@@ -56,6 +56,16 @@ describe('DELETE /api/account', () => {
     expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
   });
 
+  it('wipes the account but keeps a login that Commander also uses', async () => {
+    const { supabase, admin } = signedIn({ rpcData: false });
+
+    const response = await DELETE(jsonRequest('DELETE', { confirm: 'DELETE' }));
+
+    expect(response.status).toBe(200);
+    expect(supabase.rpc).toHaveBeenCalledWith('delete_me');
+    expect(admin.auth.admin.deleteUser).not.toHaveBeenCalled();
+  });
+
   it('hides database errors behind a generic message', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     signedIn({ rpcError: new Error('relation bell.x does not exist') });

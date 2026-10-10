@@ -36,6 +36,11 @@ export const useCalendarChoices = (accounts: AccountView[]) => {
       updateChoice(id, { active: event.target.checked });
     };
 
+  const handlePauseToggle =
+    (id: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      updateChoice(id, { paused: event.target.checked });
+    };
+
   const handleLabelChange =
     (id: string) => (event: ChangeEvent<HTMLInputElement>) => {
       updateChoice(id, { label: event.target.value });
@@ -68,6 +73,7 @@ export const useCalendarChoices = (accounts: AccountView[]) => {
     canSave: changed.length > 0 && !hasBlankLabel(changed) && !isSaving,
     showSaveError: Boolean(saveError),
     handleToggle,
+    handlePauseToggle,
     handleLabelChange,
     handleColorChange,
     handleSave,

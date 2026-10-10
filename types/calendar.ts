@@ -75,6 +75,7 @@ export interface DiscoveredCalendar {
 export interface CalendarChoice {
   id: string;
   active: boolean;
+  paused: boolean;
   label: string;
   color: string;
 }
@@ -90,6 +91,7 @@ export interface CalendarView {
   choice: CalendarChoice;
   googleCalendarId: string;
   health: CalendarHealth;
+  details: string[];
 }
 
 export interface AccountView {

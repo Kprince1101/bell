@@ -105,6 +105,7 @@ describe('0001_bell', () => {
     expect(await bellTables(db)).toEqual([
       'account_secrets',
       'accounts',
+      'agenda_visits',
       'allowlist',
       'calendars',
       'channel_secrets',

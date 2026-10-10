@@ -6,6 +6,7 @@ export const calendarChoicesBody = z.object({
       z.object({
         id: z.guid(),
         active: z.boolean(),
+        paused: z.boolean(),
         label: z.string().trim().min(1).max(100),
         color: z
           .string()

@@ -33,6 +33,24 @@ export const LOGIN_NOTICE_MESSAGES: Record<string, string> = {
   deleted: 'Your account and everything in it has been deleted.',
 };
 
+export const MINUTE_MS = 60_000;
+
+export const HOUR_MS = 60 * MINUTE_MS;
+
+export const DAY_MS = 24 * HOUR_MS;
+
+export const AGENDA_DAYS = 8;
+
+export const DUPLICATE_WINDOW_MS = 5 * MINUTE_MS;
+
+export const CHANGE_MARKER_MS = DAY_MS;
+
+export const VISIT_SESSION_GAP_MS = 30 * MINUTE_MS;
+
+export const CLOCK_TICK_MS = 1000;
+
+export const AGENDA_REFRESH_DELAY_MS = 400;
+
 export const CALENDARS_PATH = '/calendars';
 
 export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {

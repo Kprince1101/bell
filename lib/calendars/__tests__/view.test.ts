@@ -3,7 +3,11 @@ import {
   choicesFrom,
   hasBlankLabel,
 } from '@/lib/calendars/choices';
-import { describeHealth, isUnhealthy } from '@/lib/calendars/health';
+import {
+  describeHealth,
+  healthDetails,
+  isUnhealthy,
+} from '@/lib/calendars/health';
 import {
   buildCalendarsView,
   resolveCalendarMessages,
@@ -40,6 +44,27 @@ describe('describeHealth', () => {
       tone: 'off',
       text: 'Not included',
     });
+  });
+
+  it('lists last sync, channel expiry and last error for an included calendar', () => {
+    expect(
+      healthDetails(
+        calendarRow({ last_error: 'Google 500', paused: true }),
+        'America/Chicago',
+      ),
+    ).toEqual([
+      'Last sync: Oct 10, 2026, 6:00 AM',
+      'Push channel expires: Oct 15, 2026, 7:00 AM',
+      'Last error: Google 500',
+      'Paused: hidden from the agenda',
+    ]);
+    expect(
+      healthDetails(
+        calendarRow({ last_sync_at: null, channel_expires_at: null }),
+        'UTC',
+      ),
+    ).toEqual(['Last sync: never', 'Push channel: none']);
+    expect(healthDetails(calendarRow({ active: false }), 'UTC')).toEqual([]);
   });
 
   it('counts only active calendars as unhealthy', () => {

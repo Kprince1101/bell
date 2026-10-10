@@ -30,6 +30,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      agenda_visits: {
+        Row: {
+          baseline_at: string | null;
+          seen_at: string;
+          user_id: string;
+        };
+        Insert: {
+          baseline_at?: string | null;
+          seen_at: string;
+          user_id: string;
+        };
+        Update: {
+          baseline_at?: string | null;
+          seen_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       accounts: {
         Row: {
           created_at: string;
@@ -70,6 +88,7 @@ export type Database = {
           label: string;
           last_error: string | null;
           last_sync_at: string | null;
+          paused: boolean;
           quiet: boolean;
           sync_token: string | null;
           time_zone: string | null;
@@ -90,6 +109,7 @@ export type Database = {
           label: string;
           last_error?: string | null;
           last_sync_at?: string | null;
+          paused?: boolean;
           quiet?: boolean;
           sync_token?: string | null;
           time_zone?: string | null;
@@ -110,6 +130,7 @@ export type Database = {
           label?: string;
           last_error?: string | null;
           last_sync_at?: string | null;
+          paused?: boolean;
           quiet?: boolean;
           sync_token?: string | null;
           time_zone?: string | null;
@@ -254,6 +275,7 @@ export type Database = {
           all_day: boolean;
           attendees: Json;
           calendar_id: string;
+          changed_at: string | null;
           created_at: string;
           description: string | null;
           ends_at: string;
@@ -265,6 +287,7 @@ export type Database = {
           last_seen_at: string;
           location: string | null;
           organizer: string | null;
+          previous_starts_at: string | null;
           raw_start: string;
           recurring_event_id: string | null;
           source_tz: string | null;
@@ -277,6 +300,7 @@ export type Database = {
           all_day?: boolean;
           attendees?: Json;
           calendar_id: string;
+          changed_at?: string | null;
           created_at?: string;
           description?: string | null;
           ends_at: string;
@@ -288,6 +312,7 @@ export type Database = {
           last_seen_at?: string;
           location?: string | null;
           organizer?: string | null;
+          previous_starts_at?: string | null;
           raw_start: string;
           recurring_event_id?: string | null;
           source_tz?: string | null;
@@ -300,6 +325,7 @@ export type Database = {
           all_day?: boolean;
           attendees?: Json;
           calendar_id?: string;
+          changed_at?: string | null;
           created_at?: string;
           description?: string | null;
           ends_at?: string;
@@ -311,6 +337,7 @@ export type Database = {
           last_seen_at?: string;
           location?: string | null;
           organizer?: string | null;
+          previous_starts_at?: string | null;
           raw_start?: string;
           recurring_event_id?: string | null;
           source_tz?: string | null;

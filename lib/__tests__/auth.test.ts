@@ -16,20 +16,56 @@ describe('callbackUrl', () => {
   });
 });
 
+const callback = (query: Record<string, string>) => new URLSearchParams(query);
+
 describe('completeSignIn', () => {
   it('fails without a code', async () => {
     const { client, fake } = createSupabaseFake();
 
-    expect(await completeSignIn(client, null, 'UTC')).toBe('failed');
+    expect(await completeSignIn(client, callback({ tz: 'UTC' }))).toBe(
+      'failed',
+    );
     expect(fake.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  it('reports a refusal from the signup hook as not invited', async () => {
+    const { client, fake } = createSupabaseFake();
+
+    expect(
+      await completeSignIn(
+        client,
+        callback({
+          error: 'server_error',
+          error_description: 'This email is not invited to Bell.',
+        }),
+      ),
+    ).toBe('not-invited');
+    expect(fake.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  it('treats any other provider error as a failed sign-in', async () => {
+    const { client } = createSupabaseFake();
+
+    expect(
+      await completeSignIn(
+        client,
+        callback({
+          error: 'access_denied',
+          error_description: 'The user denied access',
+        }),
+      ),
+    ).toBe('failed');
   });
 
   it('claims the account with the resolved time zone', async () => {
     const { client, fake } = createSupabaseFake();
 
-    expect(await completeSignIn(client, 'code-1', 'Europe/Paris')).toBe(
-      'signed-in',
-    );
+    expect(
+      await completeSignIn(
+        client,
+        callback({ code: 'code-1', tz: 'Europe/Paris' }),
+      ),
+    ).toBe('signed-in');
     expect(fake.auth.exchangeCodeForSession).toHaveBeenCalledWith('code-1');
     expect(fake.rpc).toHaveBeenCalledWith('claim_account', {
       p_time_zone: 'Europe/Paris',
@@ -40,7 +76,10 @@ describe('completeSignIn', () => {
   it('sends UTC when the browser zone is unusable', async () => {
     const { client, fake } = createSupabaseFake();
 
-    await completeSignIn(client, 'code-1', 'Mars/Olympus');
+    await completeSignIn(
+      client,
+      callback({ code: 'code-1', tz: 'Mars/Olympus' }),
+    );
 
     expect(fake.rpc).toHaveBeenCalledWith('claim_account', {
       p_time_zone: 'UTC',
@@ -52,7 +91,9 @@ describe('completeSignIn', () => {
       rpcError: { code: '42501', message: 'not invited' },
     });
 
-    expect(await completeSignIn(client, 'code-1', 'UTC')).toBe('not-invited');
+    expect(await completeSignIn(client, callback({ code: 'code-1' }))).toBe(
+      'not-invited',
+    );
     expect(fake.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
@@ -62,7 +103,9 @@ describe('completeSignIn', () => {
       rpcError: { code: 'PGRST202', message: 'missing' },
     });
 
-    expect(await completeSignIn(client, 'code-1', 'UTC')).toBe('failed');
+    expect(await completeSignIn(client, callback({ code: 'code-1' }))).toBe(
+      'failed',
+    );
     expect(fake.auth.signOut).toHaveBeenCalled();
   });
 
@@ -72,7 +115,9 @@ describe('completeSignIn', () => {
       exchangeError: new Error('bad code'),
     });
 
-    expect(await completeSignIn(client, 'code-1', 'UTC')).toBe('failed');
+    expect(await completeSignIn(client, callback({ code: 'code-1' }))).toBe(
+      'failed',
+    );
     expect(fake.rpc).not.toHaveBeenCalled();
   });
 

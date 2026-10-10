@@ -4,6 +4,8 @@ export const DELETE_CONFIRMATION = 'DELETE';
 
 export const NOT_INVITED_CODE = '42501';
 
+export const NOT_INVITED_MESSAGE = 'This email is not invited to Bell.';
+
 export const PUBLIC_PATH_PREFIXES = ['/login', '/auth/callback'];
 
 export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';

@@ -2,6 +2,7 @@ import {
   LOGIN_ERROR_MESSAGES,
   LOGIN_NOTICE_MESSAGES,
   NOT_INVITED_CODE,
+  NOT_INVITED_MESSAGE,
   PUBLIC_PATH_PREFIXES,
 } from '@/lib/constants';
 import type { BellClient } from '@/lib/supabase/server';
@@ -34,11 +35,16 @@ export const callbackUrl = (origin: string, timeZone: string): string => {
   return url.toString();
 };
 
+export const isNotInvitedError = (description: string | null): boolean =>
+  Boolean(description?.includes(NOT_INVITED_MESSAGE));
+
 export const completeSignIn = async (
   supabase: BellClient,
-  code: string | null,
-  timeZone: string | null,
+  params: URLSearchParams,
 ): Promise<SignInOutcome> => {
+  if (isNotInvitedError(params.get('error_description'))) return 'not-invited';
+
+  const code = params.get('code');
   if (!code) return 'failed';
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -48,7 +54,7 @@ export const completeSignIn = async (
   }
 
   const { error: claimError } = await supabase.rpc('claim_account', {
-    p_time_zone: resolveTimeZone(timeZone),
+    p_time_zone: resolveTimeZone(params.get('tz')),
   });
   if (!claimError) return 'signed-in';
 

@@ -1,4 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite';
+import { NOT_INVITED_MESSAGE } from '@/lib/constants';
 import { readMigrations, runMigrations } from '@/lib/migrations';
 import type { Database } from '@/types/supabase';
 import {
@@ -226,7 +227,7 @@ describe('0001_bell', () => {
 
     expect(await decide('INVITED@example.com')).toEqual({});
     expect(await decide('stranger@example.com')).toEqual({
-      error: { http_code: 403, message: 'This email is not invited to Bell.' },
+      error: { http_code: 403, message: NOT_INVITED_MESSAGE },
     });
     await db.close();
   });

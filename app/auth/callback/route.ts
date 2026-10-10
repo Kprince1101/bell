@@ -4,12 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 
 export const GET = async (request: Request) => {
   const { searchParams, origin } = new URL(request.url);
-  const supabase = await createClient();
-  const outcome = await completeSignIn(
-    supabase,
-    searchParams.get('code'),
-    searchParams.get('tz'),
-  );
+  const outcome = await completeSignIn(await createClient(), searchParams);
 
   return NextResponse.redirect(new URL(SIGN_IN_REDIRECTS[outcome], origin));
 };

@@ -1,35 +1,42 @@
 # Bell setup
 
-These steps need an account only the owner holds: Supabase dashboard, Google Cloud, Vercel, and DNS for `dontpanic.fyi`. Do them in order; each section ends with what to check before moving on.
+These steps need an account only the owner holds: Supabase, Google Cloud, Vercel, and DNS for `dontpanic.fyi`. Do them in order; each section ends with what to check before moving on.
 
-Bell lives inside the Commander Supabase project (`jicqdcwrwhhcxohbdlbx`) under its own `bell` schema. Sign-in uses the same `auth.users` as Commander, which matters in three places called out below.
+Bell has its own Supabase project. Everything Bell stores lives in a `bell` schema there, and sign-in uses that project's Auth. Nothing in this repo names the project: its URL, keys and ref come from env (`.env.local` locally, Vercel and GitHub secrets in the cloud). Below, `<ref>` means the new project's ref.
 
-## 1. Supabase: schema, migration, allowlist
+## 1. Supabase: create the project, schema, migration, allowlist
 
-1. **Expose the schema.** Dashboard → project `jicqdcwrwhhcxohbdlbx` → Project Settings → Data API → **Exposed schemas** → add `bell` → Save. Keep `public` and anything else already listed.
-2. **Apply migration 0001.** On your machine:
+1. **Create the project.** [supabase.com/dashboard](https://supabase.com/dashboard) → New project → name `bell`, a region near the team, a strong database password (keep it; `DATABASE_URL` needs it) → Create. When it is ready, collect from Project Settings:
+   - **Project ref** (General) → `SUPABASE_PROJECT_REF`
+   - **Project URL** `https://<ref>.supabase.co` (Data API) → `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon / publishable key** (API Keys) → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **service_role / secret key** (API Keys) → `SUPABASE_SERVICE_ROLE_KEY`
+   - **Connection string** (top bar → Connect → Direct connection, or Session pooler if your network has no IPv6) with the password filled in → `DATABASE_URL`
+2. **Local env.**
    ```sh
    cp .env.example .env.local
    ```
-   Set `DATABASE_URL` in `.env.local` to the project's connection string (Dashboard → **Connect** → Direct connection, or Session pooler if your network has no IPv6), then:
+   Fill in the five values. `.env.local` is gitignored; the repo is public, so these never get committed.
+3. **Expose the schema.** Project Settings → Data API → **Exposed schemas** → add `bell` → Save.
+4. **Apply migration 0001.**
    ```sh
    npm ci
    npm run db:migrate
    ```
-   It prints `applied 0001_bell.sql`. Re-running prints `0 migration(s) applied.` The runner records what it applied in `bell.migrations`; it never touches Commander's own `supabase_migrations` history.
-   To have merges to `main` apply new migrations automatically, add the same value as the repository secret `DATABASE_URL` (GitHub → Settings → Secrets and variables → Actions). The **Migrate** workflow does nothing until that secret exists, and can also be run by hand from the Actions tab.
-3. **Invite people.** SQL editor:
+   It prints `applied 0001_bell.sql`. Re-running prints `0 migration(s) applied.` Applied files are recorded in `bell.migrations`.
+   To have merges to `main` apply new migrations automatically, add `DATABASE_URL` as a repository secret (GitHub → Settings → Secrets and variables → Actions). The **Migrate** workflow does nothing until that secret exists, and can also be run by hand from the Actions tab.
+5. **Invite people.** SQL editor:
    ```sql
    insert into bell.allowlist (email) values ('you@example.com');
    ```
    Emails are stored lowercase. Remove someone with `delete from bell.allowlist where email = '...';` and their next sign-in is refused.
-4. Check: SQL editor `select * from bell.users;` runs (empty), and `select * from bell.migrations;` shows `0001_bell.sql`.
+6. Check: SQL editor `select * from bell.users;` runs (empty), and `select * from bell.migrations;` shows `0001_bell.sql`.
 
 ## 2. Google Cloud: OAuth client, Calendar API, domain
 
 One OAuth client serves sign-in now and calendar access in Bell 1. Sign-in asks only for `openid email profile`; the Calendar scopes are requested later, when someone connects a calendar.
 
-1. **Project.** [console.cloud.google.com](https://console.cloud.google.com) → project picker → New project → name `bell` (or reuse an existing one) → select it.
+1. **Project.** [console.cloud.google.com](https://console.cloud.google.com) → project picker → New project → name `bell` → select it.
 2. **Calendar API.** APIs & Services → Library → search "Google Calendar API" → Enable.
 3. **Consent screen.** Google Auth Platform → Get started (or **Branding** if it exists):
    - App name `Bell`, user support email yours, developer contact yours.
@@ -40,7 +47,7 @@ One OAuth client serves sign-in now and calendar access in Bell 1. Sign-in asks 
 4. **Client.** Google Auth Platform → Clients → Create client → Web application, name `Bell`.
    - Authorized JavaScript origins: `https://bell.dontpanic.fyi`, `http://localhost:3000`
    - Authorized redirect URIs:
-     - `https://jicqdcwrwhhcxohbdlbx.supabase.co/auth/v1/callback` (Supabase Auth sign-in)
+     - `https://<ref>.supabase.co/auth/v1/callback` (Supabase Auth sign-in; use the ref from 1.1)
      - `https://bell.dontpanic.fyi/api/google/callback` (Bell's calendar connect flow, Bell 1)
      - `http://localhost:3000/api/google/callback` (same, local)
    - Create, then copy the **Client ID** and **Client secret**.
@@ -49,33 +56,29 @@ One OAuth client serves sign-in now and calendar access in Bell 1. Sign-in asks 
    - Back in Cloud Console → APIs & Services → **Domain verification** → Add domain → `bell.dontpanic.fyi` → it confirms against the Search Console property.
    - The same verification satisfies the consent screen's authorized domain.
 
-## 3. Supabase Auth: providers, redirects, signup gate
+## 3. Supabase Auth: providers, URLs, the allowlist gate
 
 1. **Google provider.** Authentication → Sign In / Providers → Google → Enable → paste the Client ID and Client secret from 2.4 → Save.
 2. **Email.** Same page → Email → enabled. Magic links need nothing else.
-3. **Signups.** Authentication → Sign In / Providers → **Allow new users to sign up** must be on, or a first Google or magic-link sign-in fails with "Signups not allowed". _Commander impact:_ this is project-wide, so it also lets anyone create an auth user in Commander's project. Step 5 closes that.
-4. **Redirect URLs.** Authentication → URL Configuration → Redirect URLs → add:
-   - `https://bell.dontpanic.fyi/auth/callback**`
-   - `http://localhost:3000/auth/callback**`
-   - your Vercel preview pattern, e.g. `https://bell-*-<team>.vercel.app/auth/callback**`
-
-   Leave Site URL as Commander's.
-
-5. **Signup gate (recommended).** Authentication → Hooks → **Before User Created** → Postgres → schema `bell`, function `before_user_created` → Enable. It rejects any new auth user whose email is not in `bell.allowlist`, so a stranger never gets an `auth.users` row. _Commander impact:_ it applies to Commander too: inviting a new Commander user whose email is not on `bell.allowlist` is rejected while the hook is on. Add them to the allowlist first, or turn the hook off for the invite. Without the hook, Bell still refuses uninvited people at `/auth/callback`, but their auth user is left in the project.
-6. Check: Authentication → Users is unchanged so far.
+3. **Signups.** Same page → **Allow new users to sign up** on. A first Google or magic-link sign-in creates the auth user, so this must be on; step 5 limits it to the allowlist.
+4. **URLs.** Authentication → URL Configuration:
+   - Site URL: `https://bell.dontpanic.fyi`
+   - Redirect URLs: `https://bell.dontpanic.fyi/auth/callback**`, `http://localhost:3000/auth/callback**`, and your Vercel preview pattern, e.g. `https://bell-*-<team>.vercel.app/auth/callback**`
+5. **Allowlist gate (recommended).** Authentication → Hooks → **Before User Created** → Postgres → schema `bell`, function `before_user_created` → Enable. Supabase then refuses to create any auth user whose email is not in `bell.allowlist`, so a stranger never gets an account at all: Google sign-in comes back to Bell's sign-in page with "That account is not invited to Bell", and a magic-link request shows "This email is not invited to Bell." Without the hook, Bell still refuses them at `/auth/callback`, but their auth user is left behind in Authentication → Users.
+6. Check: Authentication → Users is empty.
 
 ## 4. Vercel: project, env, domain
 
-1. **Project.** [vercel.com/new](https://vercel.com/new) → Import `Kprince1101/bell` → Project name `bell` → Framework Next.js (detected) → don't deploy yet if it offers env first.
+1. **Project.** [vercel.com/new](https://vercel.com/new) → Import `Kprince1101/bell` → Project name `bell` → Framework Next.js (detected) → add env before the first deploy if it offers.
 2. **Environment variables** (Settings → Environment Variables), for Production and Preview:
 
-   | Name                            | Value                                                         | Sensitive |
-   | ------------------------------- | ------------------------------------------------------------- | --------- |
-   | `NEXT_PUBLIC_SUPABASE_URL`      | `https://jicqdcwrwhhcxohbdlbx.supabase.co`                    | no        |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Commander's anon key (Supabase → Project Settings → API Keys) | no        |
-   | `SUPABASE_SERVICE_ROLE_KEY`     | Commander's service role key (same page)                      | yes       |
+   | Name                            | Value                         | Sensitive |
+   | ------------------------------- | ----------------------------- | --------- |
+   | `NEXT_PUBLIC_SUPABASE_URL`      | `https://<ref>.supabase.co`   | no        |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon key from 1.1         | no        |
+   | `SUPABASE_SERVICE_ROLE_KEY`     | the service role key from 1.1 | yes       |
 
-   The service role key is used only by `DELETE /api/account` to remove the auth user. It never goes in the repo, which is public. `DATABASE_URL` does not go to Vercel.
+   The service role key is used only by `DELETE /api/account` to remove the auth user. `DATABASE_URL` and `SUPABASE_PROJECT_REF` do not go to Vercel.
 
 3. **Domain.** Settings → Domains → Add `bell.dontpanic.fyi`. Vercel shows the DNS record it wants; add it in section 5.
 4. **Deploy.** Deployments → Redeploy (or merge to `main`).
@@ -102,11 +105,10 @@ Check: `https://bell.dontpanic.fyi` loads the Bell sign-in page with a valid cer
    union all select 'allowlist', count(*) from bell.allowlist where email = '<email>'
    union all select 'auth.users', count(*) from auth.users where id = '<id>';
    ```
-   Later Bell tables are covered by the same function: `bell.delete_me()` deletes from every `bell` table that has a `user_id` column, then the user row (which cascades), then the allowlist entry.
+   Later Bell tables are covered by the same function: `bell.delete_me()` deletes from every `bell` table that has a `user_id` column, then the user row (which cascades), then the allowlist entry; the route then deletes the auth user.
 
-## What Bell shares with Commander
+## Conventions
 
-- **`auth.users`.** Deleting a Bell account deletes the auth user. If someone signs in to Bell with the same email they use for Commander, deleting their Bell account also deletes their Commander login.
-- **Signup settings and hooks** are project-wide (section 3).
-- **Migrations.** Bell's live in `bell.migrations` and are applied by `npm run db:migrate`, never by `supabase db push`.
-- **Edge functions** from this repo are named `bell-*` and deployed with `supabase functions deploy bell-<name> --project-ref jicqdcwrwhhcxohbdlbx`. Bell 0 ships none.
+- **Migrations** live in `supabase/migrations/NNNN_name.sql` and are applied by `npm run db:migrate`, which records them in `bell.migrations`.
+- **Types**: after a migration, `SUPABASE_PROJECT_REF=<ref> npm run db:types` regenerates `types/supabase.ts` (needs `supabase login`).
+- **Edge functions** in this repo are named `bell-*` under `supabase/functions/` and deployed with `SUPABASE_PROJECT_REF=<ref> npm run functions:deploy`. Bell 0 ships none.

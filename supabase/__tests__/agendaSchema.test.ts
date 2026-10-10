@@ -22,6 +22,23 @@ const firstSync = async (db: PGlite, calendarId: string) =>
 const byId = async (db: PGlite, calendarId: string, eventId: string) =>
   (await events(db, calendarId)).find((row) => row.event_id === eventId);
 
+describe('0003_agenda order', () => {
+  it('applies after 0001 and 0002', async () => {
+    const { db } = await migratedDb();
+
+    const { rows } = await db.query<{ name: string }>(
+      'select name from bell.migrations order by applied_at, name',
+    );
+
+    expect(rows.map((row) => row.name)).toEqual([
+      '0001_bell.sql',
+      '0002_google_calendars.sql',
+      '0003_agenda.sql',
+    ]);
+    await db.close();
+  });
+});
+
 describe('0003_agenda change tracking', () => {
   it('marks nothing during a calendar’s first sync', async () => {
     const { db, calendarId } = await migratedDb();
@@ -137,24 +154,46 @@ describe('0003_agenda visits', () => {
     await db.close();
   });
 
-  it('delete_me removes the agenda visit too', async () => {
-    const { db } = await migratedDb();
-    await db.query(
-      'insert into bell.agenda_visits (user_id, seen_at) values ($1, now())',
-      [ME],
-    );
-    await actAs(db, ME);
+  it.each([
+    ['a Bell-only user', false],
+    ['a user who keeps a Commander profile', true],
+  ])(
+    'delete_me removes the agenda visit and change-stamped events of %s',
+    async (_who, hasProfile) => {
+      const { db, calendarId } = await migratedDb();
+      await db.exec(
+        'create table public.profiles (user_id uuid primary key references auth.users(id))',
+      );
+      if (hasProfile) {
+        await db.query('insert into public.profiles (user_id) values ($1)', [
+          ME,
+        ]);
+      }
+      await firstSync(db, calendarId);
+      await applySync(db, calendarId, delta([STANDUP_MOVED, CLIENT_REVIEW_ET]));
+      await db.query(
+        'insert into bell.agenda_visits (user_id, seen_at) values ($1, now()), ($2, now())',
+        [ME, NEIGHBOUR],
+      );
+      await actAs(db, ME);
 
-    await db.query('select bell.delete_me()');
-    await actAsOwner(db);
+      const removable = await db.query<{ delete_me: boolean }>(
+        'select bell.delete_me()',
+      );
+      await actAsOwner(db);
 
-    const { rows } = await db.query<{ n: number }>(
-      'select count(*)::int as n from bell.agenda_visits where user_id = $1',
-      [ME],
-    );
-    expect(rows[0].n).toBe(0);
-    await db.close();
-  });
+      expect(removable.rows[0].delete_me).toBe(!hasProfile);
+      const counts = await db.query<{ n: number }>(
+        `select count(*)::int as n from bell.agenda_visits where user_id = $1
+         union all select count(*)::int from bell.events where user_id = $1
+         union all select count(*)::int from bell.calendars where user_id = $1
+         union all select count(*)::int from bell.agenda_visits where user_id = $2`,
+        [ME, NEIGHBOUR],
+      );
+      expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 1]);
+      await db.close();
+    },
+  );
 });
 
 describe('0003_agenda realtime', () => {

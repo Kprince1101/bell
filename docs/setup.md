@@ -145,7 +145,7 @@ Bell never polls Google. Each included calendar has a watch channel that makes G
    4. Vercel → Logs, filter `[bell]`: every `[bell] sync` line says `trigger=webhook` or `trigger=connect`, never anything else; tick runs log only `[bell] watch`, `[bell] unwatch` and `[bell] tick` lines. That is the proof no calendar is fetched on a timer.
    5. Disconnect one account: its calendars and events are gone (`select count(*) from bell.events e join bell.calendars c on c.id = e.calendar_id where c.account_id = '<id>';` is 0) and it no longer appears under myaccount.google.com → Security → Third-party connections.
 
-## 8. Bell 2: agenda
+## 9. Bell 2: agenda
 
 The agenda at `/` shows today and the next 7 days from every included calendar, in the time zone set on Account. It updates live: the browser subscribes to Supabase Realtime changes on `bell.events` for the signed-in user (RLS decides what it may see) and reloads the agenda when a sync lands.
 
@@ -154,7 +154,7 @@ The agenda at `/` shows today and the next 7 days from every included calendar, 
    - `bell.calendars.paused`: a paused calendar keeps syncing but is hidden from the agenda.
    - `bell.agenda_visits`: when each user last looked, so "since you last looked" survives reloads.
    - `bell.events` in the `supabase_realtime` publication.
-2. **Realtime.** Check: Database → Publications → `supabase_realtime` lists `bell.events`. If the migration ran before the publication existed, run `alter publication supabase_realtime add table bell.events;` in the SQL editor. Nothing else needs turning on; the browser uses the anon key and the user's session.
+2. **Realtime.** Adding `bell.events` to the project's `supabase_realtime` publication is the one change 0003 makes outside the `bell` schema. It only adds that table; every table already in the publication stays as it was. Check: Database → Publications → `supabase_realtime` lists `bell.events`. If the migration ran before the publication existed, run `alter publication supabase_realtime add table bell.events;` in the SQL editor. Nothing else needs turning on; the browser uses the anon key and the user's session.
 3. **Prove it.**
    1. With two Google accounts connected and three calendars included, invite both of your accounts to one meeting. The agenda shows it once, with both calendars' badges.
    2. Create an event at 1:00 PM in Google Calendar with its time zone set to Eastern (TZID `America/New_York`) while your Account time zone is Central. Its card shows a red flag: `12:00 PM CT · invite says 1:00 PM ET`.

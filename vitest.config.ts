@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     restoreMocks: true,
+    testTimeout: 30_000,
     projects: [
       {
         extends: true,

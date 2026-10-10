@@ -208,8 +208,8 @@ describe('runNotify escalation', () => {
       eventId,
       plusMinutes(base, 45).toISOString(),
     ]);
-    await tickAt(1);
-    await tickAt(1);
+    await tickAt(2);
+    await tickAt(2);
 
     expect(pushover.send).toHaveBeenCalledTimes(1);
     expect(pushover.send.mock.calls[0][0].message).toContain('has moved to');

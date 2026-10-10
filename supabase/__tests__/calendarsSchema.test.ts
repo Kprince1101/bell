@@ -349,27 +349,45 @@ describe('0002_google_calendars access', () => {
     await db.close();
   });
 
-  it('delete_me leaves no account, secret, calendar or event of the user', async () => {
-    const { db, calendarId, accountId } = await migratedDb();
-    await applySync(db, calendarId, delta([STANDUP, OFFSITE]));
-    await actAs(db, ME);
+  it.each([
+    ['a Bell-only user', false],
+    ['a user who keeps a Commander profile', true],
+  ])(
+    'delete_me leaves no account, secret, calendar or event of %s',
+    async (_who, hasProfile) => {
+      const { db, calendarId, accountId } = await migratedDb();
+      await db.exec(
+        'create table public.profiles (user_id uuid primary key references auth.users(id))',
+      );
+      if (hasProfile) {
+        await db.query('insert into public.profiles (user_id) values ($1)', [
+          ME,
+        ]);
+      }
+      await applySync(db, calendarId, delta([STANDUP, OFFSITE]));
+      await actAs(db, ME);
 
-    await db.query('select bell.delete_me()');
-    await actAsOwner(db);
+      const removable = await db.query<{ delete_me: boolean }>(
+        'select bell.delete_me()',
+      );
+      await actAsOwner(db);
 
-    const counts = await db.query<{ n: number }>(
-      `select count(*)::int as n from bell.account_secrets where account_id = $1
+      expect(removable.rows[0].delete_me).toBe(!hasProfile);
+
+      const counts = await db.query<{ n: number }>(
+        `select count(*)::int as n from bell.account_secrets where account_id = $1
        union all select count(*)::int from bell.accounts where user_id = $2
        union all select count(*)::int from bell.calendars where user_id = $2
        union all select count(*)::int from bell.events where user_id = $2`,
-      [accountId, ME],
-    );
-    const neighbour = await db.query<{ n: number }>(
-      'select count(*)::int as n from bell.calendars where user_id = $1',
-      [NEIGHBOUR],
-    );
-    expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0]);
-    expect(neighbour.rows[0].n).toBe(1);
-    await db.close();
-  });
+        [accountId, ME],
+      );
+      const neighbour = await db.query<{ n: number }>(
+        'select count(*)::int as n from bell.calendars where user_id = $1',
+        [NEIGHBOUR],
+      );
+      expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0]);
+      expect(neighbour.rows[0].n).toBe(1);
+      await db.close();
+    },
+  );
 });

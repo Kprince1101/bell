@@ -61,7 +61,7 @@ describe('DELETE /api/account', () => {
     });
     supabase.rpc.mockImplementation(async () => {
       order.push('delete_me');
-      return { data: null, error: null };
+      return { data: true, error: null };
     });
 
     const response = await DELETE(jsonRequest('DELETE', { confirm: 'DELETE' }));

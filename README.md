@@ -1,0 +1,3 @@
+# Bell
+
+Bell takes several calendars, builds one agenda from them, and makes sure you know you have a meeting. It is a Next.js app on Vercel at `bell.dontpanic.fyi`, backed by the Commander Supabase project under its own `bell` schema, open to anyone the owner puts on the allowlist, and any account can delete itself and everything Bell holds for it in one step. Run it with `npm ci && npm run dev` after copying `.env.example` to `.env.local`; `npm run validate` is the gate, `npm run db:migrate` applies `supabase/migrations`, and the owner-only setup (Supabase, Google Cloud, Vercel, DNS) is in [docs/setup.md](docs/setup.md).

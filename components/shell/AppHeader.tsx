@@ -2,10 +2,10 @@ import Link from 'next/link';
 
 interface AppHeaderProps {
   email: string;
-  showInvites: boolean;
+  showOwnerLinks: boolean;
 }
 
-export const AppHeader = ({ email, showInvites }: AppHeaderProps) => (
+export const AppHeader = ({ email, showOwnerLinks }: AppHeaderProps) => (
   <header className="flex items-center justify-between border-b border-border px-6 py-4">
     <Link href="/" className="text-xl font-bold text-accent">
       Bell
@@ -20,7 +20,7 @@ export const AppHeader = ({ email, showInvites }: AppHeaderProps) => (
       <Link href="/notifications" className="hover:text-accent">
         Notifications
       </Link>
-      {showInvites && (
+      {showOwnerLinks && (
         <Link href="/invites" className="hover:text-accent">
           Invites
         </Link>
@@ -28,6 +28,11 @@ export const AppHeader = ({ email, showInvites }: AppHeaderProps) => (
       <Link href="/account" className="hover:text-accent">
         Account
       </Link>
+      {showOwnerLinks && (
+        <Link href="/health" className="hover:text-accent">
+          Health
+        </Link>
+      )}
       <span className="hidden text-text-muted sm:inline">{email}</span>
       <form action="/auth/signout" method="post">
         <button type="submit" className="text-text-muted hover:text-foreground">

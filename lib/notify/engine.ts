@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { attemptDelivery } from '@/lib/notify/deliver';
 import type { NotifyServices } from '@/lib/notify/services';
 import type { Delivery } from '@/types/notifications';
@@ -8,6 +9,7 @@ export interface NotifyReport {
   sent: number;
   failed: number;
   fallbacks: number;
+  receiptsCancelled: number;
 }
 
 interface ChainReport {
@@ -47,10 +49,36 @@ const deliverChain = async (
   };
 };
 
+const cancelReceipt = async (
+  services: NotifyServices,
+  receipt: string,
+): Promise<boolean> => {
+  try {
+    await services.pushover.cancelReceipt(receipt);
+    return true;
+  } catch (err) {
+    services.log(
+      `[bell] receipt-cancel-failed receipt=${receipt} error=${getErrorMessage(err)}`,
+    );
+    return false;
+  }
+};
+
+const cancelStaleReceipts = async (
+  services: NotifyServices,
+): Promise<number> => {
+  const receipts = await services.repo.takeStaleReceipts();
+  const cancelled = await Promise.all(
+    receipts.map((receipt) => cancelReceipt(services, receipt)),
+  );
+  return cancelled.filter(Boolean).length;
+};
+
 export const runNotify = async (
   services: NotifyServices,
 ): Promise<NotifyReport> => {
   const now = services.now().toISOString();
+  const receiptsCancelled = await cancelStaleReceipts(services);
   const materialized = await services.repo.materialize(now);
   const due = await services.repo.claimDue(now);
   const chains = await Promise.all(
@@ -63,10 +91,17 @@ export const runNotify = async (
       failed: total.failed + chain.failed,
       fallbacks: total.fallbacks + chain.fallbacks,
     }),
-    { materialized, due: due.length, sent: 0, failed: 0, fallbacks: 0 },
+    {
+      materialized,
+      due: due.length,
+      sent: 0,
+      failed: 0,
+      fallbacks: 0,
+      receiptsCancelled,
+    },
   );
   services.log(
-    `[bell] notify-tick materialized=${report.materialized} due=${report.due} sent=${report.sent} failed=${report.failed} fallbacks=${report.fallbacks}`,
+    `[bell] notify-tick materialized=${report.materialized} due=${report.due} sent=${report.sent} failed=${report.failed} fallbacks=${report.fallbacks} receipts-cancelled=${report.receiptsCancelled}`,
   );
   return report;
 };

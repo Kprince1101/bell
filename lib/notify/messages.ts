@@ -1,3 +1,4 @@
+import { MINUTE_MS } from '@/lib/constants';
 import { SLACK_ACK_ACTION, SLACK_JOIN_ACTION } from '@/lib/notify/slack';
 import type {
   Delivery,
@@ -20,12 +21,18 @@ type Reminder = Pick<
 
 const UNTITLED = '(no title)';
 
-export const STEP_LEAD: Record<NotifyStep, string> = {
-  '30m': 'starts in 30 minutes',
-  '10m': 'starts in 10 minutes',
-  '2m': 'starts in 2 minutes',
-  start: 'is starting now',
-  moved: 'has moved',
+const minutesWord = (minutes: number): string => {
+  if (minutes === 1) return '1 minute';
+  return `${minutes} minutes`;
+};
+
+export const leadPhrase = (startsAt: string, now: Date): string => {
+  const minutes = Math.round(
+    (Date.parse(startsAt) - now.getTime()) / MINUTE_MS,
+  );
+  if (minutes > 0) return `starts in ${minutesWord(minutes)}`;
+  if (minutes === 0) return 'is starting now';
+  return `started ${minutesWord(-minutes)} ago`;
 };
 
 export const PUSHOVER_PRIORITY: Record<NotifyStep, PushoverPriority> = {
@@ -72,11 +79,11 @@ const whenOf = (reminder: Reminder): string =>
     reminder.step === 'moved',
   );
 
-export const reminderSentence = (reminder: Reminder): string => {
+export const reminderSentence = (reminder: Reminder, now: Date): string => {
   if (reminder.step === 'moved') {
     return `${titleOf(reminder)} has moved to ${whenOf(reminder)}.`;
   }
-  return `${titleOf(reminder)} ${STEP_LEAD[reminder.step]}, at ${whenOf(reminder)}.`;
+  return `${titleOf(reminder)} ${leadPhrase(reminder.starts_at, now)}, at ${whenOf(reminder)}.`;
 };
 
 const joinButton = (url: string | null): SlackButton[] => {
@@ -84,18 +91,22 @@ const joinButton = (url: string | null): SlackButton[] => {
   return [{ text: 'Join', actionId: SLACK_JOIN_ACTION, url }];
 };
 
-export const slackReminder = (reminder: Reminder): SlackMessage => {
+export const slackReminder = (reminder: Reminder, now: Date): SlackMessage => {
   const buttons = joinButton(reminder.join_url);
-  if (reminder.step !== 'moved') {
-    buttons.push({
-      text: 'Acknowledge',
-      actionId: SLACK_ACK_ACTION,
-      value: reminder.event_id,
-      primary: true,
-    });
+  if (reminder.step === 'moved') {
+    return {
+      text: `:bell: *${titleOf(reminder)}* has moved to ${whenOf(reminder)}.`,
+      buttons,
+    };
   }
+  buttons.push({
+    text: 'Acknowledge',
+    actionId: SLACK_ACK_ACTION,
+    value: reminder.event_id,
+    primary: true,
+  });
   return {
-    text: `:bell: *${titleOf(reminder)}* ${STEP_LEAD[reminder.step]}, at ${whenOf(reminder)}.`,
+    text: `:bell: *${titleOf(reminder)}* ${leadPhrase(reminder.starts_at, now)}, at ${whenOf(reminder)}.`,
     buttons,
   };
 };
@@ -105,17 +116,17 @@ export const slackAcknowledged = (reminder: Reminder): SlackMessage => ({
   buttons: joinButton(reminder.join_url),
 });
 
-export const pushoverBody = (reminder: Reminder) => ({
+export const pushoverBody = (reminder: Reminder, now: Date) => ({
   title: titleOf(reminder),
-  message: reminderSentence(reminder),
+  message: reminderSentence(reminder, now),
   priority: PUSHOVER_PRIORITY[reminder.step],
   url: reminder.join_url,
 });
 
-export const smsBody = (reminder: Reminder): string => {
+export const smsBody = (reminder: Reminder, now: Date): string => {
   const join = reminder.join_url && ` Join: ${reminder.join_url}`;
-  return `Bell: ${reminderSentence(reminder)}${join || ''} Reply to acknowledge.`;
+  return `Bell: ${reminderSentence(reminder, now)}${join || ''} Reply to acknowledge.`;
 };
 
-export const voiceScript = (reminder: Reminder): string =>
-  `Bell reminder. ${reminderSentence(reminder)} Press any key to acknowledge.`;
+export const voiceScript = (reminder: Reminder, now: Date): string =>
+  `Bell reminder. ${reminderSentence(reminder, now)} Press any key to acknowledge.`;

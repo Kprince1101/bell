@@ -26,6 +26,7 @@ export interface NotifyRepo {
   claimDue: (now: string) => Promise<Delivery[]>;
   finish: (id: string, outcome: SendOutcome, at: string) => Promise<void>;
   claimFallback: (id: string, now: string) => Promise<Delivery | null>;
+  takeStaleReceipts: () => Promise<string[]>;
   acknowledge: (
     target: AckTarget,
     by: string,

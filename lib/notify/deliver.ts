@@ -41,7 +41,7 @@ const slackToken = (services: NotifyServices, sealed: string | null): string =>
 
 const sendSlack: Sender = async (services, delivery) => {
   const token = slackToken(services, delivery.slack_bot_token);
-  const message = slackReminder(delivery);
+  const message = slackReminder(delivery, services.now());
   const previous = decodeSlackRef(delivery.slack_ref);
   if (previous && delivery.step !== 'moved') {
     await services.slack.updateMessage(token, previous, message);
@@ -56,7 +56,7 @@ const sendSlack: Sender = async (services, delivery) => {
 const sendPushover: Sender = async (services, delivery) => {
   const { receipt } = await services.pushover.send({
     user: requireValue(delivery.target, 'No Pushover key saved'),
-    ...pushoverBody(delivery),
+    ...pushoverBody(delivery, services.now()),
     callback: services.links.pushoverCallback(delivery.id),
   });
   return receipt;
@@ -65,14 +65,14 @@ const sendPushover: Sender = async (services, delivery) => {
 const sendSms: Sender = (services, delivery) =>
   services.twilio.sendSms(
     requireValue(delivery.target, 'No phone number saved'),
-    smsBody(delivery),
+    smsBody(delivery, services.now()),
   );
 
 const sendVoice: Sender = (services, delivery) =>
   services.twilio.call(
     requireValue(delivery.target, 'No phone number saved'),
     reminderCallTwiml(
-      voiceScript(delivery),
+      voiceScript(delivery, services.now()),
       services.links.voiceAction(delivery.id),
     ),
   );

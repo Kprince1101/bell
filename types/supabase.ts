@@ -336,6 +336,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      stale_receipts: {
+        Row: {
+          created_at: string;
+          event_id: string;
+          receipt: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_id: string;
+          receipt: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          event_id?: string;
+          receipt?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       events: {
         Row: {
           all_day: boolean;
@@ -559,6 +580,10 @@ export type Database = {
       materialize_notifications: {
         Args: { p_now: string; p_event_id?: string };
         Returns: number;
+      };
+      take_stale_receipts: {
+        Args: never;
+        Returns: string[];
       };
       notification_delivery: {
         Args: { p_id: string };

@@ -100,6 +100,7 @@ describe('/api/tick', () => {
         sent: 0,
         failed: 0,
         fallbacks: 0,
+        receiptsCancelled: 0,
       },
       channels: { renewed: [], failed: [], pushStopped: [] },
     });

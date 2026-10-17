@@ -108,6 +108,7 @@ describe('0001_bell', () => {
       'migrations',
       'notifications',
       'slack_installs',
+      'stale_receipts',
       'users',
     ]);
     await db.close();

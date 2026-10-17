@@ -91,6 +91,7 @@ export const createFakeNotifyRepo = () => {
     claimDue: vi.fn<NotifyRepo['claimDue']>(async () => []),
     finish: vi.fn<NotifyRepo['finish']>(async () => undefined),
     claimFallback: vi.fn<NotifyRepo['claimFallback']>(async () => null),
+    takeStaleReceipts: vi.fn<NotifyRepo['takeStaleReceipts']>(async () => []),
     acknowledge: vi.fn<NotifyRepo['acknowledge']>(async () => []),
     ackTargetsForPhone: vi.fn<NotifyRepo['ackTargetsForPhone']>(async () => []),
     notificationOwner: vi.fn<NotifyRepo['notificationOwner']>(async () => null),

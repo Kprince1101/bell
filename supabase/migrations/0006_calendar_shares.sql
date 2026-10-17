@@ -285,6 +285,7 @@ declare
   v_channel text;
 begin
   if new.status = 'cancelled' or new.all_day then
+    perform bell.queue_stale_receipts(new.id, v_now);
     update bell.notifications
     set claimed_at = v_now, result = 'cancelled', error = 'event cancelled'
     where event_id = new.id and claimed_at is null;
@@ -292,6 +293,7 @@ begin
   end if;
 
   if new.starts_at is distinct from old.starts_at then
+    perform bell.queue_stale_receipts(new.id, v_now);
     delete from bell.notifications where event_id = new.id and step <> 'moved';
 
     if old.status <> 'cancelled' and not old.all_day and (
@@ -332,6 +334,7 @@ begin
     delete from bell.notifications
     where event_id = new.id
       and step <> 'moved'
+      and acknowledged_at is null
       and (claimed_at is null or result = 'cancelled');
   end if;
 

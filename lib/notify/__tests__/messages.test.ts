@@ -37,9 +37,14 @@ describe('reminder messages', () => {
     starts_at: '2026-10-10T19:00:00+00:00',
     source_tz: 'America/Chicago',
   });
+  const minutesBefore = (minutes: number) =>
+    new Date(Date.parse(reminder.starts_at) - minutes * 60_000);
 
   it('Slack carries Join and Acknowledge and says how far out', () => {
-    const message = slackReminder({ ...reminder, step: '10m' });
+    const message = slackReminder(
+      { ...reminder, step: '10m' },
+      minutesBefore(10),
+    );
 
     expect(message.text).toBe(
       ':bell: *Client sync* starts in 10 minutes, at 2:00 PM CDT.',
@@ -54,31 +59,54 @@ describe('reminder messages', () => {
 
   it('Slack drops Join when there is no link', () => {
     expect(
-      slackReminder({ ...reminder, join_url: null }).buttons.map((b) => b.text),
+      slackReminder(
+        { ...reminder, join_url: null },
+        minutesBefore(30),
+      ).buttons.map((b) => b.text),
     ).toEqual(['Acknowledge']);
   });
 
   it('push priority climbs with the step', () => {
-    expect(pushoverBody({ ...reminder, step: '30m' }).priority).toBe(0);
-    expect(pushoverBody({ ...reminder, step: '10m' }).priority).toBe(1);
-    expect(pushoverBody({ ...reminder, step: '2m' }).priority).toBe(2);
+    const now = minutesBefore(30);
+    expect(pushoverBody({ ...reminder, step: '30m' }, now).priority).toBe(0);
+    expect(pushoverBody({ ...reminder, step: '10m' }, now).priority).toBe(1);
+    expect(pushoverBody({ ...reminder, step: '2m' }, now).priority).toBe(2);
   });
 
   it('the SMS has title, time and join link', () => {
-    expect(smsBody({ ...reminder, step: '2m' })).toBe(
+    expect(smsBody({ ...reminder, step: '2m' }, minutesBefore(2))).toBe(
       'Bell: Client sync starts in 2 minutes, at 2:00 PM CDT. Join: https://meet.google.com/abc-defg-hij Reply to acknowledge.',
     );
   });
 
   it('the call reads the title and time', () => {
-    expect(voiceScript({ ...reminder, step: 'start', title: '  ' })).toBe(
+    expect(
+      voiceScript(
+        { ...reminder, step: 'start', title: '  ' },
+        minutesBefore(0),
+      ),
+    ).toBe(
       'Bell reminder. (no title) is starting now, at 2:00 PM CDT. Press any key to acknowledge.',
     );
   });
 
   it('a move names the new day and time', () => {
-    expect(pushoverBody({ ...reminder, step: 'moved' }).message).toBe(
-      'Client sync has moved to Sat, Oct 10, 2:00 PM CDT.',
+    expect(
+      pushoverBody({ ...reminder, step: 'moved' }, minutesBefore(60)).message,
+    ).toBe('Client sync has moved to Sat, Oct 10, 2:00 PM CDT.');
+  });
+
+  it('says the real time left when a step goes out late', () => {
+    const tenMinuteStep = { ...reminder, step: '10m' as const };
+
+    expect(slackReminder(tenMinuteStep, minutesBefore(2.5)).text).toBe(
+      ':bell: *Client sync* starts in 3 minutes, at 2:00 PM CDT.',
     );
+    expect(pushoverBody(tenMinuteStep, minutesBefore(1)).message).toBe(
+      'Client sync starts in 1 minute, at 2:00 PM CDT.',
+    );
+    expect(
+      voiceScript({ ...reminder, step: 'start' }, minutesBefore(-2)),
+    ).toContain('Client sync started 2 minutes ago, at 2:00 PM CDT.');
   });
 });

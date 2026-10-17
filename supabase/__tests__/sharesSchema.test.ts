@@ -30,6 +30,7 @@ const EVERY_BELL_TABLE = [
   'migrations',
   'notifications',
   'slack_installs',
+  'stale_receipts',
   'users',
 ];
 
@@ -176,6 +177,10 @@ describe('0006 two-user isolation across every bell table', () => {
       await shareWith(db, who, who.teamCalendarId, outsider.email);
       await addMeeting(db, who, who.teamCalendarId, plusMinutes(base, 30));
       await addMeeting(db, who, who.privateCalendarId, plusMinutes(base, 30));
+      await db.query(
+        'insert into bell.stale_receipts (receipt, user_id, event_id) values ($1, $2, gen_random_uuid())',
+        [`receipt-${who.email}`, who.id],
+      );
     }
 
     expect(await bellTables(db)).toEqual(EVERY_BELL_TABLE);

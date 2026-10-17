@@ -274,6 +274,90 @@ describe('0004 event changes', () => {
     await db.close();
   });
 
+  it('a status change without a move keeps an early acknowledgement', async () => {
+    const { db, calendarId, base } = await ready();
+    const eventId = await addEvent(db, calendarId, {
+      startsAt: plusMinutes(base, 30),
+    });
+    await db.query('select * from bell.acknowledge_event($1, $2, $3, $4)', [
+      eventId,
+      ME,
+      'app:me@example.com',
+      plusMinutes(base, -1).toISOString(),
+    ]);
+
+    await db.query(
+      "update bell.events set status = 'tentative' where id = $1",
+      [eventId],
+    );
+
+    const rows = await notificationsFor(db, eventId);
+    expect(rows).toHaveLength(7);
+    expect(
+      rows.every((row) => row.acknowledged_by === 'app:me@example.com'),
+    ).toBe(true);
+    expect(await claim(db, plusMinutes(base, 30))).toEqual([]);
+    await db.close();
+  });
+
+  it.each([
+    ['cancelled', "status = 'cancelled'"],
+    ['moved', "starts_at = starts_at + interval '1 hour'"],
+  ])(
+    'a %s meeting queues the receipt of its live emergency push, once',
+    async (_change, assignment) => {
+      const { db, calendarId, base } = await ready();
+      const eventId = await addEvent(db, calendarId, {
+        startsAt: plusMinutes(base, 2),
+      });
+      await db.query(
+        `update bell.notifications set claimed_at = now(), sent_at = now(), result = 'sent', provider_ref = 'receipt-9'
+         where event_id = $1 and step = '2m' and channel = 'pushover'`,
+        [eventId],
+      );
+
+      await db.query(`update bell.events set ${assignment} where id = $1`, [
+        eventId,
+      ]);
+      const taken = await db.query<{ take_stale_receipts: string }>(
+        'select * from bell.take_stale_receipts()',
+      );
+      const again = await db.query('select * from bell.take_stale_receipts()');
+
+      expect(taken.rows.map((row) => row.take_stale_receipts)).toEqual([
+        'receipt-9',
+      ]);
+      expect(again.rows).toEqual([]);
+      await db.close();
+    },
+  );
+
+  it('an acknowledged emergency push is not queued again on cancel', async () => {
+    const { db, calendarId, base } = await ready();
+    const eventId = await addEvent(db, calendarId, {
+      startsAt: plusMinutes(base, 2),
+    });
+    await db.query(
+      `update bell.notifications set claimed_at = now(), sent_at = now(), result = 'sent', provider_ref = 'receipt-9'
+       where event_id = $1 and step = '2m' and channel = 'pushover'`,
+      [eventId],
+    );
+    await db.query('select * from bell.acknowledge_event($1, $2, $3, now())', [
+      eventId,
+      ME,
+      'app:me@example.com',
+    ]);
+
+    await db.query(
+      "update bell.events set status = 'cancelled' where id = $1",
+      [eventId],
+    );
+
+    const taken = await db.query('select * from bell.take_stale_receipts()');
+    expect(taken.rows).toEqual([]);
+    await db.close();
+  });
+
   it('the same sync applied twice changes nothing', async () => {
     const { db, calendarId, base } = await ready();
     const eventId = await addEvent(db, calendarId, {
@@ -310,6 +394,9 @@ describe('0004 access', () => {
       db.query('select * from bell.slack_installs'),
     ).rejects.toThrow();
     await expect(
+      db.query('select * from bell.stale_receipts'),
+    ).rejects.toThrow();
+    await expect(
       db.query('update bell.channels set active = false'),
     ).rejects.toThrow();
     await expect(
@@ -337,7 +424,13 @@ describe('0004 access', () => {
           ME,
         ]);
       }
-      await addEvent(db, calendarId, { startsAt: plusMinutes(base, 30) });
+      const eventId = await addEvent(db, calendarId, {
+        startsAt: plusMinutes(base, 30),
+      });
+      await db.query(
+        "insert into bell.stale_receipts (receipt, user_id, event_id) values ('receipt-9', $1, $2)",
+        [ME, eventId],
+      );
       await actAs(db, ME);
 
       const removable = await db.query<{ delete_me: boolean }>(
@@ -349,6 +442,7 @@ describe('0004 access', () => {
         `select count(*)::int as n from bell.channels where user_id = $1
        union all select count(*)::int from bell.channel_secrets where user_id = $1
        union all select count(*)::int from bell.notifications where user_id = $1
+       union all select count(*)::int from bell.stale_receipts where user_id = $1
        union all select count(*)::int from bell.channel_secrets where value = $2`,
         [ME, PHONE],
       );
@@ -360,7 +454,7 @@ describe('0004 access', () => {
         [NEIGHBOUR],
       );
       expect(removable.rows[0].delete_me).toBe(!hasProfile);
-      expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0]);
+      expect(counts.rows.map((row) => row.n)).toEqual([0, 0, 0, 0, 0]);
       expect(install.rows).toEqual([{ installed_by: null }]);
       expect(neighbour.rows[0].n).toBe(1);
       await db.close();

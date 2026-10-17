@@ -17,7 +17,7 @@ import {
 } from '@/supabase/testing/notifySeed';
 import { createFakeNotifyServices } from '@/test-utils/notifyFakes';
 
-const setup = async () => {
+const setupBare = async () => {
   const { db, calendarId } = await createNotifyDb();
   await connectEveryChannel(db, ME);
   const base = thisMinute();
@@ -30,11 +30,16 @@ const setup = async () => {
     clock = plusMinutes(base, minutes);
     return runNotify(fakes.services);
   };
-  const eventId = await addEvent(db, calendarId, {
-    startsAt: plusMinutes(base, 30),
+  return { db, calendarId, base, tickAt, ...fakes };
+};
+
+const setup = async () => {
+  const bare = await setupBare();
+  const eventId = await addEvent(bare.db, bare.calendarId, {
+    startsAt: plusMinutes(bare.base, 30),
     title: 'Client sync',
   });
-  return { db, base, eventId, tickAt, ...fakes };
+  return { ...bare, eventId };
 };
 
 describe('runNotify escalation', () => {
@@ -217,6 +222,67 @@ describe('runNotify escalation', () => {
     expect(pushover.send).toHaveBeenCalledTimes(2);
     expect(pushover.send.mock.calls[1][0].message).toContain(
       'starts in 30 minutes',
+    );
+    await db.close();
+  });
+
+  it('a meeting added three minutes out says three minutes, not ten', async () => {
+    const { db, calendarId, base, tickAt, slack, pushover } = await setupBare();
+    await addEvent(db, calendarId, {
+      startsAt: plusMinutes(base, 3),
+      title: 'Standup',
+    });
+
+    await tickAt(0);
+
+    expect(slack.postMessage.mock.calls[0][2].text).toContain(
+      'Standup* starts in 3 minutes',
+    );
+    expect(pushover.send).toHaveBeenCalledTimes(1);
+    expect(pushover.send.mock.calls[0][0]).toMatchObject({
+      priority: 1,
+      message: expect.stringContaining('Standup starts in 3 minutes'),
+    });
+    await db.close();
+  });
+
+  it.each([
+    ['cancelled', "status = 'cancelled'"],
+    ['moved', "starts_at = starts_at + interval '1 hour'"],
+  ])(
+    'the next tick cancels the repeating emergency push of a %s meeting',
+    async (_change, assignment) => {
+      const { db, eventId, tickAt, pushover } = await setup();
+      await tickAt(28);
+      expect(pushover.send.mock.calls[0][0].priority).toBe(2);
+
+      await db.query(`update bell.events set ${assignment} where id = $1`, [
+        eventId,
+      ]);
+      const report = await tickAt(29);
+      await tickAt(29);
+
+      expect(report.receiptsCancelled).toBe(1);
+      expect(pushover.cancelReceipt).toHaveBeenCalledTimes(1);
+      expect(pushover.cancelReceipt).toHaveBeenCalledWith('receipt-1');
+      await db.close();
+    },
+  );
+
+  it('a failed receipt cancel is logged and the tick goes on', async () => {
+    const { db, eventId, tickAt, pushover, log } = await setup();
+    await tickAt(28);
+    pushover.cancelReceipt.mockRejectedValue(new Error('Pushover: 500'));
+    await db.query(
+      "update bell.events set status = 'cancelled' where id = $1",
+      [eventId],
+    );
+
+    const report = await tickAt(29);
+
+    expect(report.receiptsCancelled).toBe(0);
+    expect(log).toHaveBeenCalledWith(
+      '[bell] receipt-cancel-failed receipt=receipt-1 error=Pushover: 500',
     );
     await db.close();
   });

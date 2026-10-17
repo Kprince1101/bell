@@ -47,6 +47,9 @@ export const createNotifyRepo = (admin: AdminClient): NotifyRepo => ({
       unwrap(await admin.rpc('claim_fallback', { p_id: id, p_now: now })),
     ),
 
+  takeStaleReceipts: async () =>
+    unwrap(await admin.rpc('take_stale_receipts')) ?? [],
+
   acknowledge: async ({ eventId, userId }, by, at) =>
     deliveries.parse(
       unwrap(

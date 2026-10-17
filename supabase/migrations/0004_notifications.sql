@@ -48,6 +48,13 @@ create table bell.notifications (
   unique (event_id, step, channel)
 );
 
+create table bell.stale_receipts (
+  receipt text primary key,
+  user_id uuid not null references bell.users(id) on delete cascade,
+  event_id uuid not null,
+  created_at timestamptz not null default now()
+);
+
 create index channel_secrets_value_idx on bell.channel_secrets (kind, value);
 create index notifications_due_idx on bell.notifications (due_at) where claimed_at is null;
 create index notifications_user_idx on bell.notifications (user_id, event_starts_at);
@@ -58,6 +65,7 @@ alter table bell.slack_installs enable row level security;
 alter table bell.channels enable row level security;
 alter table bell.channel_secrets enable row level security;
 alter table bell.notifications enable row level security;
+alter table bell.stale_receipts enable row level security;
 
 create policy channels_select_own on bell.channels
   for select to authenticated using (user_id = auth.uid());
@@ -65,10 +73,12 @@ create policy channels_select_own on bell.channels
 create policy notifications_select_own on bell.notifications
   for select to authenticated using (user_id = auth.uid());
 
-revoke all on bell.slack_installs, bell.channels, bell.channel_secrets, bell.notifications
+revoke all on bell.slack_installs, bell.channels, bell.channel_secrets, bell.notifications,
+  bell.stale_receipts
   from public, anon, authenticated;
 grant select on bell.channels, bell.notifications to authenticated;
-grant all on bell.slack_installs, bell.channels, bell.channel_secrets, bell.notifications
+grant all on bell.slack_installs, bell.channels, bell.channel_secrets, bell.notifications,
+  bell.stale_receipts
   to service_role;
 
 create function bell.notification_delivery(p_id uuid)
@@ -456,6 +466,31 @@ as $$
   select exists (select 1 from changed);
 $$;
 
+create function bell.queue_stale_receipts(p_event_id uuid, p_now timestamptz)
+returns void
+language sql
+set search_path = ''
+as $$
+  insert into bell.stale_receipts (receipt, user_id, event_id)
+  select n.provider_ref, n.user_id, n.event_id
+  from bell.notifications n
+  where n.event_id = p_event_id
+    and n.channel = 'pushover'
+    and n.result = 'sent'
+    and n.provider_ref is not null
+    and n.acknowledged_at is null
+    and n.sent_at > p_now - interval '10 minutes'
+  on conflict (receipt) do nothing;
+$$;
+
+create function bell.take_stale_receipts()
+returns setof text
+language sql
+set search_path = ''
+as $$
+  delete from bell.stale_receipts returning receipt;
+$$;
+
 create function bell.events_after_insert()
 returns trigger
 language plpgsql
@@ -477,6 +512,7 @@ declare
   v_channel text;
 begin
   if new.status = 'cancelled' or new.all_day then
+    perform bell.queue_stale_receipts(new.id, v_now);
     update bell.notifications
     set claimed_at = v_now, result = 'cancelled', error = 'event cancelled'
     where event_id = new.id and claimed_at is null;
@@ -484,6 +520,7 @@ begin
   end if;
 
   if new.starts_at is distinct from old.starts_at then
+    perform bell.queue_stale_receipts(new.id, v_now);
     delete from bell.notifications where event_id = new.id and step <> 'moved';
 
     if old.status <> 'cancelled' and not old.all_day and (
@@ -523,6 +560,7 @@ begin
     delete from bell.notifications
     where event_id = new.id
       and step <> 'moved'
+      and acknowledged_at is null
       and (claimed_at is null or result = 'cancelled');
   end if;
 
@@ -559,6 +597,8 @@ revoke all on function bell.set_channel_active(uuid, text, boolean) from public,
 revoke all on function bell.channel_target(uuid, text) from public, anon, authenticated;
 revoke all on function bell.save_slack_install(text, text, text, text, uuid) from public, anon, authenticated;
 revoke all on function bell.set_calendar_quiet(uuid, uuid, boolean) from public, anon, authenticated;
+revoke all on function bell.queue_stale_receipts(uuid, timestamptz) from public, anon, authenticated;
+revoke all on function bell.take_stale_receipts() from public, anon, authenticated;
 revoke all on function bell.events_after_insert() from public, anon, authenticated;
 revoke all on function bell.events_after_change() from public, anon, authenticated;
 
@@ -576,3 +616,5 @@ grant execute on function bell.set_channel_active(uuid, text, boolean) to servic
 grant execute on function bell.channel_target(uuid, text) to service_role;
 grant execute on function bell.save_slack_install(text, text, text, text, uuid) to service_role;
 grant execute on function bell.set_calendar_quiet(uuid, uuid, boolean) to service_role;
+grant execute on function bell.queue_stale_receipts(uuid, timestamptz) to service_role;
+grant execute on function bell.take_stale_receipts() to service_role;

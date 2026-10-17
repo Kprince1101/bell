@@ -165,6 +165,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      channel_tests: {
+        Row: {
+          error: string | null;
+          kind: string;
+          ok: boolean;
+          tested_at: string;
+          user_id: string;
+        };
+        Insert: {
+          error?: string | null;
+          kind: string;
+          ok: boolean;
+          tested_at: string;
+          user_id: string;
+        };
+        Update: {
+          error?: string | null;
+          kind?: string;
+          ok?: boolean;
+          tested_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      job_runs: {
+        Row: {
+          detail: string | null;
+          job: string;
+          ok: boolean;
+          ran_at: string;
+        };
+        Insert: {
+          detail?: string | null;
+          job: string;
+          ok: boolean;
+          ran_at: string;
+        };
+        Update: {
+          detail?: string | null;
+          job?: string;
+          ok?: boolean;
+          ran_at?: string;
+        };
+        Relationships: [];
+      };
       notifications: {
         Row: {
           acknowledged_at: string | null;
@@ -402,6 +447,29 @@ export type Database = {
       record_sync_failure: {
         Args: { p_calendar_id: string; p_error: string };
         Returns: Database['bell']['Tables']['calendars']['Row'];
+      };
+      health_report: {
+        Args: { p_user_id: string };
+        Returns: Json;
+      };
+      record_channel_test: {
+        Args: {
+          p_user_id: string;
+          p_kind: string;
+          p_ok: boolean;
+          p_error: string | null;
+          p_at: string;
+        };
+        Returns: undefined;
+      };
+      record_job_run: {
+        Args: {
+          p_job: string;
+          p_ok: boolean;
+          p_detail: string | null;
+          p_at: string;
+        };
+        Returns: undefined;
       };
       ack_target_for_phone: {
         Args: { p_phone: string; p_now: string };

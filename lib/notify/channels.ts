@@ -8,7 +8,7 @@ import { sendTest } from '@/lib/notify/deliver';
 import type { NotifyServices } from '@/lib/notify/services';
 import { completeOAuthCallback } from '@/lib/oauthCallback';
 import type { ConnectOutcome, OAuthCallback } from '@/lib/oauthCallback';
-import type { ChannelKind } from '@/types/notifications';
+import type { ChannelKind, ChannelTarget } from '@/types/notifications';
 
 export const SLACK_STATE_COOKIE = 'bell_slack_state';
 
@@ -54,6 +54,19 @@ export const setChannelActive = async (
   if (!changed) throw new ApiError(CHANNEL_NOT_SET_UP, 409);
 };
 
+const attemptTest = async (
+  services: NotifyServices,
+  kind: ChannelKind,
+  target: ChannelTarget,
+): Promise<string | null> => {
+  try {
+    await sendTest(services, kind, target);
+    return null;
+  } catch (err) {
+    return getErrorMessage(err);
+  }
+};
+
 export const testChannel = async (
   services: NotifyServices,
   userId: string,
@@ -61,17 +74,23 @@ export const testChannel = async (
 ): Promise<void> => {
   const target = await services.repo.channelTarget(userId, kind);
   if (!target) throw new ApiError(CHANNEL_NOT_SET_UP, 409);
-  try {
-    await sendTest(services, kind, target);
+  const error = await attemptTest(services, kind, target);
+  await services.repo.recordChannelTest({
+    userId,
+    kind,
+    ok: error === null,
+    error,
+    at: services.now().toISOString(),
+  });
+  if (error !== null) {
     services.log(
-      `[bell] channel-test user=${userId} channel=${kind} result=sent`,
-    );
-  } catch (err) {
-    services.log(
-      `[bell] channel-test user=${userId} channel=${kind} result=failed error=${getErrorMessage(err)}`,
+      `[bell] channel-test user=${userId} channel=${kind} result=failed error=${error}`,
     );
     throw new ApiError(CHANNEL_TEST_FAILED, 502);
   }
+  services.log(
+    `[bell] channel-test user=${userId} channel=${kind} result=sent`,
+  );
 };
 
 export const setCalendarQuiet = async (

@@ -11,7 +11,7 @@ const AppLayout = async ({ children }: AppLayoutProps) => {
 
   return (
     <>
-      <AppHeader email={user.email} showInvites={isOwner} />
+      <AppHeader email={user.email} showOwnerLinks={isOwner} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
         {children}
       </main>

@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { GENERIC_ERROR_MESSAGE } from '@/lib/constants';
 import { ApiError } from '@/lib/errors';
+import { isOwner } from '@/lib/invites';
 import { createClient } from '@/lib/supabase/server';
 import type { BellClient } from '@/lib/supabase/server';
 
@@ -19,6 +20,14 @@ export const requireUser = async (): Promise<AuthedContext> => {
 
   if (!user) throw new ApiError('Unauthorized', 401);
   return { supabase, user };
+};
+
+export const requireOwner = async (): Promise<AuthedContext> => {
+  const context = await requireUser();
+  if (!(await isOwner(context.supabase))) {
+    throw new ApiError('Forbidden', 403);
+  }
+  return context;
 };
 
 const INVALID_REQUEST = 'Invalid request';

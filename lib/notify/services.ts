@@ -1,4 +1,5 @@
 import type { NotifyLinks } from '@/lib/notify/links';
+import type { ChannelTestResult, JobRun } from '@/types/health';
 import type {
   AckTarget,
   ChannelKind,
@@ -57,6 +58,8 @@ export interface NotifyRepo {
     calendarId: string,
     quiet: boolean,
   ) => Promise<boolean>;
+  recordJobRun: (run: JobRun) => Promise<void>;
+  recordChannelTest: (test: ChannelTestResult) => Promise<void>;
 }
 
 export interface NotifyServices {

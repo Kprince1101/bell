@@ -21,7 +21,7 @@
     "check:oxlintrc": "node scripts/sync-oxlintrc.mts --check",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
     "db:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_REF\" --schema bell > types/supabase.ts && prettier --write types/supabase.ts",
-    "functions:deploy": "supabase functions deploy --project-ref \"$SUPABASE_PROJECT_REF\""
+    "deploy:functions": "node --env-file-if-exists=.env.local scripts/deploy-functions.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

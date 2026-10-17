@@ -28,7 +28,14 @@ export const deleteAccount = async (
   supabase: BellClient,
   admin: AdminClient,
   userId: string,
+  releaseGoogle: () => Promise<void>,
 ): Promise<DeleteAccountResult> => {
+  try {
+    await releaseGoogle();
+  } catch (err) {
+    console.error('[bell] delete-me google-release-failed', err);
+  }
+
   const { data: removeAuthUser, error } = await supabase.rpc('delete_me');
   if (error) throw error;
 

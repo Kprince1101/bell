@@ -9,6 +9,7 @@
   --border: #2c3038;
   --text-muted: #a1a1aa;
   --danger: #e5484d;
+  --success: #46a758;
 }
 
 @theme inline {
@@ -20,6 +21,7 @@
   --color-border: var(--border);
   --color-text-muted: var(--text-muted);
   --color-danger: var(--danger);
+  --color-success: var(--success);
   --font-sans: var(--font-geist-sans);
 }
 

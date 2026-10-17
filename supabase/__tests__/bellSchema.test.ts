@@ -6,6 +6,8 @@ import {
   actAs,
   actAsOwner,
   asMigrationDb,
+  bellTables,
+  countMentions,
   createSupabaseDb,
 } from '@/supabase/testing/pglite';
 
@@ -65,13 +67,6 @@ const deleteMe = async (db: PGlite): Promise<boolean> => {
   return rows[0].remove_auth_user;
 };
 
-const bellTables = async (db: PGlite): Promise<string[]> => {
-  const { rows } = await db.query<{ table_name: string }>(
-    "select table_name from information_schema.tables where table_schema = 'bell' and table_type = 'BASE TABLE' order by table_name",
-  );
-  return rows.map((row) => row.table_name);
-};
-
 const rowsMentioning = async (
   db: PGlite,
   userId: string,
@@ -79,11 +74,7 @@ const rowsMentioning = async (
 ): Promise<number> => {
   let total = 0;
   for (const table of await bellTables(db)) {
-    const { rows } = await db.query<{ hits: number }>(
-      `select count(*)::int as hits from bell.${table} t where to_jsonb(t)::text ilike '%' || $1 || '%' or to_jsonb(t)::text ilike '%' || $2 || '%'`,
-      [userId, email],
-    );
-    total += rows[0].hits;
+    total += await countMentions(db, table, [userId, email]);
   }
   const auth = await db.query<{ hits: number }>(
     'select count(*)::int as hits from auth.users where id = $1',
@@ -102,7 +93,24 @@ describe('0001_bell', () => {
     expect(rows.map((row) => row.column_name).sort()).toEqual(
       Object.keys(EXPECTED_USER_COLUMNS).sort(),
     );
-    expect(await bellTables(db)).toEqual(['allowlist', 'migrations', 'users']);
+    expect(await bellTables(db)).toEqual([
+      'account_secrets',
+      'accounts',
+      'agenda_visits',
+      'allowlist',
+      'calendar_shares',
+      'calendars',
+      'channel_secrets',
+      'channel_tests',
+      'channels',
+      'events',
+      'job_runs',
+      'migrations',
+      'notifications',
+      'slack_installs',
+      'stale_receipts',
+      'users',
+    ]);
     await db.close();
   });
 

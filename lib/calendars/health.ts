@@ -44,6 +44,35 @@ export const describeHealth = (
   };
 };
 
+type DetailFields = Pick<
+  CalendarRow,
+  'active' | 'paused' | 'last_sync_at' | 'channel_expires_at' | 'last_error'
+>;
+
+const syncDetail = (calendar: DetailFields, timeZone: string): string => {
+  if (!calendar.last_sync_at) return 'Last sync: never';
+  return `Last sync: ${formatSyncedAt(calendar.last_sync_at, timeZone)}`;
+};
+
+const channelDetail = (calendar: DetailFields, timeZone: string): string => {
+  if (!calendar.channel_expires_at) return 'Push channel: none';
+  return `Push channel expires: ${formatSyncedAt(calendar.channel_expires_at, timeZone)}`;
+};
+
+export const healthDetails = (
+  calendar: DetailFields,
+  timeZone: string,
+): string[] => {
+  if (!calendar.active) return [];
+  const details = [
+    syncDetail(calendar, timeZone),
+    channelDetail(calendar, timeZone),
+  ];
+  if (calendar.last_error) details.push(`Last error: ${calendar.last_error}`);
+  if (calendar.paused) details.push('Paused: hidden from the agenda');
+  return details;
+};
+
 export const isUnhealthy = (
   calendar: Pick<CalendarRow, 'active' | 'healthy'>,
 ) => calendar.active && !calendar.healthy;

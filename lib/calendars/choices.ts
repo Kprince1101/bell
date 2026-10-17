@@ -14,6 +14,7 @@ export const choicesFrom = (accounts: AccountView[]): ChoiceMap =>
 
 const sameChoice = (left: CalendarChoice, right: CalendarChoice): boolean =>
   left.active === right.active &&
+  left.paused === right.paused &&
   left.label === right.label &&
   left.color === right.color;
 

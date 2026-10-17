@@ -17,6 +17,7 @@ const ACCOUNTS = [
         choice: {
           id: 'cal-1',
           active: true,
+          paused: false,
           label: 'Client',
           color: '#4285f4',
         },
@@ -25,6 +26,11 @@ const ACCOUNTS = [
           tone: 'unhealthy' as const,
           text: 'Unhealthy: Google 500',
         },
+        details: [
+          'Last sync: Oct 10, 2026, 6:00 AM',
+          'Push channel expires: Oct 15, 2026, 7:00 AM',
+          'Last error: Google 500',
+        ],
       },
     ],
   },
@@ -47,6 +53,14 @@ describe('CalendarsClient', () => {
 
     expect(screen.getByText('me@client.com')).toBeInTheDocument();
     expect(screen.getByText('Unhealthy: Google 500')).toBeInTheDocument();
+    expect(
+      screen.getByText('Last sync: Oct 10, 2026, 6:00 AM'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Push channel expires: Oct 15, 2026, 7:00 AM'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Last error: Google 500')).toBeInTheDocument();
+    expect(screen.getByLabelText('Pause me@client.com')).not.toBeChecked();
     expect(screen.getByText('Bad thing')).toBeInTheDocument();
     expect(screen.getByLabelText('Include me@client.com')).toBeChecked();
     expect(
@@ -64,7 +78,13 @@ describe('CalendarsClient', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save calendars' }));
 
     expect(saveCalendarChoices).toHaveBeenCalledWith([
-      { id: 'cal-1', active: true, label: 'Client A', color: '#4285f4' },
+      {
+        id: 'cal-1',
+        active: true,
+        paused: false,
+        label: 'Client A',
+        color: '#4285f4',
+      },
     ]);
   });
 });

@@ -17,6 +17,7 @@ vi.mock('@/lib/navigation', () => ({ redirectTo: vi.fn() }));
 const choice = (id: string, active: boolean) => ({
   id,
   active,
+  paused: false,
   label: `Calendar ${id}`,
   color: '#4285f4',
 });
@@ -31,11 +32,13 @@ const PROPS: CalendarsClientProps = {
           choice: choice('cal-1', true),
           googleCalendarId: 'me@gmail.com',
           health: { tone: 'healthy', text: 'Waiting for first sync' },
+          details: ['Last sync: never', 'Push channel: none'],
         },
         {
           choice: choice('cal-2', false),
           googleCalendarId: 'family@group.calendar.google.com',
           health: { tone: 'off', text: 'Not included' },
+          details: [],
         },
       ],
     },
@@ -82,9 +85,34 @@ describe('useCalendarsClient', () => {
     await act(() => result.current.selection.handleSave(submitEvent()));
 
     expect(saveCalendarChoices).toHaveBeenCalledWith([
-      { id: 'cal-2', active: true, label: 'Family', color: '#ff0000' },
+      {
+        id: 'cal-2',
+        active: true,
+        paused: false,
+        label: 'Family',
+        color: '#ff0000',
+      },
     ]);
     expect(redirectTo).toHaveBeenCalledWith('/calendars?notice=saved');
+  });
+
+  it('offers pause only on included calendars and saves it', async () => {
+    vi.mocked(saveCalendarChoices).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useCalendarsClient(PROPS));
+    const [included, excluded] = result.current.accountCards[0].calendars;
+
+    expect(included.showPause).toBe(true);
+    expect(excluded.showPause).toBe(false);
+    expect(included.details).toEqual([
+      'Last sync: never',
+      'Push channel: none',
+    ]);
+    act(() => included.onPauseToggle(input('', true)));
+    await act(() => result.current.selection.handleSave(submitEvent()));
+
+    expect(saveCalendarChoices).toHaveBeenCalledWith([
+      { ...choice('cal-1', true), paused: true },
+    ]);
   });
 
   it('will not save a blank label', () => {

@@ -1,0 +1,57 @@
+{
+  "name": "bell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "legion-audit directives && oxlint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run typecheck && npm run check:oxlintrc && npm run lint && npm test",
+    "sync:oxlintrc": "node scripts/sync-oxlintrc.mts",
+    "check:oxlintrc": "node scripts/sync-oxlintrc.mts --check",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts",
+    "db:types": "supabase gen types typescript --project-id \"$SUPABASE_PROJECT_REF\" --schema bell > types/supabase.ts && prettier --write types/supabase.ts",
+    "functions:deploy": "supabase functions deploy --project-ref \"$SUPABASE_PROJECT_REF\""
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.1",
+    "clsx": "^2.1.1",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^29.1.1",
+    "legion-toolkit": "^0.5.0",
+    "oxlint": "1.81.0",
+    "pg": "^8.23.1",
+    "prettier": "3.9.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.0.3"
+  },
+  "prettier": "legion-toolkit/prettier"
+}

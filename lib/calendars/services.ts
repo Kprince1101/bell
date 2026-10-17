@@ -26,6 +26,7 @@ export interface CalendarRepo {
   ) => Promise<void>;
   calendarsForUser: (userId: string) => Promise<CalendarRow[]>;
   calendarsForAccount: (accountId: string) => Promise<CalendarRow[]>;
+  calendarById: (calendarId: string) => Promise<CalendarRow | null>;
   calendarByChannel: (channelId: string) => Promise<CalendarRow | null>;
   calendarsDueForRenewal: (cutoff: string) => Promise<CalendarRow[]>;
   saveChoice: (choice: CalendarChoice) => Promise<void>;
@@ -34,7 +35,7 @@ export interface CalendarRepo {
     channel: CalendarChannel,
   ) => Promise<void>;
   clearCalendar: (calendarId: string) => Promise<void>;
-  applySync: (calendarId: string, delta: SyncDelta) => Promise<void>;
+  applySync: (calendarId: string, delta: SyncDelta) => Promise<boolean>;
   recordFailure: (calendarId: string, message: string) => Promise<void>;
   markPushStopped: (now: string) => Promise<string[]>;
 }

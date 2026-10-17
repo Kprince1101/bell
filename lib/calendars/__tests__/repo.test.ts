@@ -184,19 +184,32 @@ describe('createCalendarRepo', () => {
     ]);
   });
 
-  it('applies a sync through the single shared upsert function', async () => {
-    const recorder = createAdminRecorder();
+  it('reads one calendar by id', async () => {
+    const recorder = createAdminRecorder([
+      { data: calendarRow(), error: null },
+    ]);
     const repo = createCalendarRepo(recorder.admin, () => KEY);
 
-    await repo.applySync(CALENDAR_ID, {
+    expect(await repo.calendarById(CALENDAR_ID)).toEqual(calendarRow());
+    expect(recorder.argsOf('eq')).toEqual([['id', CALENDAR_ID]]);
+  });
+
+  it('applies a sync through the single shared upsert function', async () => {
+    const recorder = createAdminRecorder([{ data: false, error: null }]);
+    const repo = createCalendarRepo(recorder.admin, () => KEY);
+
+    const applied = await repo.applySync(CALENDAR_ID, {
       mode: 'full',
       upserts: [],
       cancelled: ['x'],
+      fromSyncToken: 'prev',
       nextSyncToken: 'next',
       windowStart: 'w',
+      windowEnd: 'e',
       seenAt: 's',
     });
 
+    expect(applied).toBe(false);
     expect(recorder.argsOf('rpc')).toEqual([
       [
         'apply_sync',
@@ -204,9 +217,11 @@ describe('createCalendarRepo', () => {
           p_calendar_id: CALENDAR_ID,
           p_events: [],
           p_cancelled: ['x'],
+          p_from_sync_token: 'prev',
           p_sync_token: 'next',
           p_full: true,
           p_window_start: 'w',
+          p_window_end: 'e',
           p_seen_at: 's',
         },
       ],

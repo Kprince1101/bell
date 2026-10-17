@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { BellServices } from '@/lib/calendars/services';
-import { signValue } from '@/lib/crypto/tokenCipher';
+import { UnreadableTokenError, signValue } from '@/lib/crypto/tokenCipher';
 import { isAlreadyGone } from '@/lib/google/errors';
 import type { CalendarChannel, CalendarRow } from '@/types/calendar';
 
 export const CHANNEL_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export const isGoneOrUnreadable = (err: unknown): boolean =>
+  isAlreadyGone(err) || err instanceof UnreadableTokenError;
 
 const fallbackExpiry = (now: Date): number =>
   now.getTime() + CHANNEL_TTL_SECONDS * 1000;
@@ -53,7 +56,7 @@ export const stopWatch = async (
       resourceId: calendar.channel_resource_id,
     });
   } catch (err) {
-    if (!isAlreadyGone(err)) throw err;
+    if (!isGoneOrUnreadable(err)) throw err;
   }
   services.log(
     `[bell] unwatch calendar=${calendar.id} channel=${calendar.channel_id}`,

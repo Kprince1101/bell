@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { deleteAccount, updateTimeZone } from '@/lib/account';
 import { parseBody, requireUser, withRouteErrors } from '@/lib/apiRoute';
 import { bellServices } from '@/lib/calendars/bellServices';
-import { disconnectAllAccounts } from '@/lib/calendars/disconnect';
+import { releaseAllAccounts } from '@/lib/calendars/disconnect';
 import { deleteAccountBody, updateTimeZoneBody } from '@/lib/schemas/account';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -17,7 +17,7 @@ export const DELETE = withRouteErrors(async (request: Request) => {
   const { supabase, user } = await requireUser();
   await parseBody(request, deleteAccountBody);
   await deleteAccount(supabase, createAdminClient(), user.id, () =>
-    disconnectAllAccounts(bellServices(), user.id),
+    releaseAllAccounts(bellServices(), user.id),
   );
   return NextResponse.json({ deleted: true });
 });

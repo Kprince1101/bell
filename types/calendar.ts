@@ -42,14 +42,11 @@ export interface SyncDelta {
   mode: SyncMode;
   upserts: SyncedEvent[];
   cancelled: string[];
+  fromSyncToken: string | null;
   nextSyncToken: string;
   windowStart: string;
+  windowEnd: string;
   seenAt: string;
-}
-
-export interface SyncWindow {
-  timeMin: string;
-  timeMax: string;
 }
 
 export interface CalendarChannel {

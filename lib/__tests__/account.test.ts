@@ -48,17 +48,27 @@ describe('deleteAccount', () => {
     ]);
   });
 
-  it('keeps every row when stopping Google fails', async () => {
+  it('logs a failed Google release and still wipes bell data and the auth user', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
     const { client, fake } = createSupabaseFake();
     const admin = createAdminFake();
+    const failure = new Error(
+      'BELL_TOKEN_KEY must be 32 bytes, base64 encoded',
+    );
 
-    await expect(
-      deleteAccount(client, admin.client, USER_ID, async () => {
-        throw new Error('Google 503');
-      }),
-    ).rejects.toThrow('Google 503');
-    expect(fake.rpc).not.toHaveBeenCalled();
-    expect(admin.fake.auth.admin.deleteUser).not.toHaveBeenCalled();
+    const result = await deleteAccount(client, admin.client, USER_ID, () =>
+      Promise.reject(failure),
+    );
+
+    expect(result).toEqual({ authUserRemoved: true });
+    expect(consoleError).toHaveBeenCalledWith(
+      '[bell] delete-me google-release-failed',
+      failure,
+    );
+    expect(fake.rpc).toHaveBeenCalledWith('delete_me');
+    expect(admin.fake.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
   });
 
   it('keeps the auth user of someone who also has a Commander profile', async () => {

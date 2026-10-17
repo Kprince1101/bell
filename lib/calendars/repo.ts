@@ -141,6 +141,15 @@ export const createCalendarRepo = (
         await admin.from('calendars').select('*').eq('account_id', accountId),
       ),
 
+    calendarById: async (calendarId) =>
+      unwrap(
+        await admin
+          .from('calendars')
+          .select('*')
+          .eq('id', calendarId)
+          .maybeSingle(),
+      ),
+
     calendarByChannel: async (channelId) =>
       unwrap(
         await admin
@@ -201,19 +210,20 @@ export const createCalendarRepo = (
       unwrap(await admin.from('events').delete().eq('calendar_id', calendarId));
     },
 
-    applySync: async (calendarId, delta) => {
+    applySync: async (calendarId, delta) =>
       unwrap(
         await admin.rpc('apply_sync', {
           p_calendar_id: calendarId,
           p_events: delta.upserts as unknown as Json,
           p_cancelled: delta.cancelled,
+          p_from_sync_token: delta.fromSyncToken,
           p_sync_token: delta.nextSyncToken,
           p_full: delta.mode === 'full',
           p_window_start: delta.windowStart,
+          p_window_end: delta.windowEnd,
           p_seen_at: delta.seenAt,
         }),
-      );
-    },
+      ),
 
     recordFailure: async (calendarId, message) => {
       unwrap(

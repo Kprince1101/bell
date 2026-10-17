@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
+  UnreadableTokenError,
   decryptToken,
   encryptToken,
   readTokenKey,
@@ -33,11 +34,13 @@ describe('encryptToken', () => {
         [version, iv, tag, flipped.toString('base64')].join('.'),
         KEY,
       ),
-    ).toThrow();
+    ).toThrow(UnreadableTokenError);
     expect(() =>
       decryptToken(encryptToken('secret', KEY), randomBytes(32)),
-    ).toThrow();
-    expect(() => decryptToken('plain-token', KEY)).toThrow('Unreadable');
+    ).toThrow(UnreadableTokenError);
+    expect(() => decryptToken('plain-token', KEY)).toThrow(
+      UnreadableTokenError,
+    );
   });
 });
 

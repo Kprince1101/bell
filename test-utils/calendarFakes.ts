@@ -1,9 +1,9 @@
 import { createBellServices } from '@/lib/calendars/services';
 import type { CalendarRepo } from '@/lib/calendars/services';
 import type { GoogleConfig } from '@/lib/google/config';
-import type { GoogleEventsPage } from '@/lib/google/schemas';
+import type { GoogleEvent, GoogleEventsPage } from '@/lib/google/schemas';
 import type { AccountRow, CalendarRow } from '@/types/calendar';
-import type { GoogleGateway } from '@/types/google';
+import type { EventsQuery, GoogleGateway } from '@/types/google';
 import { USER_ID } from '@/test-utils/supabaseFake';
 
 export const NOW = new Date('2026-10-10T12:00:00.000Z');
@@ -65,6 +65,27 @@ export const eventsPage = (
   ...overrides,
 });
 
+export const fakeEventsList =
+  (items: GoogleEvent[], pageSize: number) =>
+  async (query: EventsQuery): Promise<GoogleEventsPage> => {
+    if (query.syncToken) return eventsPage({ nextSyncToken: 'sync-quiet' });
+    const timeMin = Date.parse(query.timeMin ?? '');
+    const matching = items.filter(
+      (item) => Date.parse(item.end?.dateTime ?? '') > timeMin,
+    );
+    const offset = Number(query.pageToken ?? 0);
+    const next = offset + pageSize;
+    const page = matching.slice(offset, next);
+    if (next < matching.length) {
+      return eventsPage({
+        items: page,
+        nextPageToken: String(next),
+        nextSyncToken: undefined,
+      });
+    }
+    return eventsPage({ items: page, nextSyncToken: 'sync-full' });
+  };
+
 export type Fake<Shape> = {
   [Key in keyof Shape]: Shape[Key] extends (...args: infer Args) => infer Out
     ? ReturnType<typeof vi.fn<(...args: Args) => Out>>
@@ -122,6 +143,9 @@ export const createFakeRepo = () => {
     calendarsForAccount: vi.fn<CalendarRepo['calendarsForAccount']>(
       async () => [calendarRow()],
     ),
+    calendarById: vi.fn<CalendarRepo['calendarById']>(async () =>
+      calendarRow(),
+    ),
     calendarByChannel: vi.fn<CalendarRepo['calendarByChannel']>(async () =>
       calendarRow(),
     ),
@@ -131,7 +155,7 @@ export const createFakeRepo = () => {
     saveChoice: vi.fn<CalendarRepo['saveChoice']>(async () => undefined),
     saveChannel: vi.fn<CalendarRepo['saveChannel']>(async () => undefined),
     clearCalendar: vi.fn<CalendarRepo['clearCalendar']>(async () => undefined),
-    applySync: vi.fn<CalendarRepo['applySync']>(async () => undefined),
+    applySync: vi.fn<CalendarRepo['applySync']>(async () => true),
     recordFailure: vi.fn<CalendarRepo['recordFailure']>(async () => undefined),
     markPushStopped: vi.fn<CalendarRepo['markPushStopped']>(async () => []),
   };

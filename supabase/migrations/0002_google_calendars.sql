@@ -92,25 +92,32 @@ create function bell.apply_sync(
   p_calendar_id uuid,
   p_events jsonb,
   p_cancelled text[],
+  p_from_sync_token text,
   p_sync_token text,
   p_full boolean,
   p_window_start timestamptz,
+  p_window_end timestamptz,
   p_seen_at timestamptz
 )
-returns void
+returns boolean
 language plpgsql
 set search_path = ''
 as $$
 declare
   v_user_id uuid;
+  v_stored_token text;
 begin
-  select c.user_id into v_user_id
+  select c.user_id, c.sync_token into v_user_id, v_stored_token
   from bell.calendars c
   where c.id = p_calendar_id
   for update;
 
   if v_user_id is null then
     raise exception 'unknown calendar: %', p_calendar_id using errcode = 'P0002';
+  end if;
+
+  if v_stored_token is distinct from p_from_sync_token then
+    return false;
   end if;
 
   insert into bell.events (
@@ -173,6 +180,7 @@ begin
     where ev.calendar_id = p_calendar_id
       and ev.last_seen_at < p_seen_at
       and ev.ends_at >= p_window_start
+      and ev.starts_at < p_window_end
       and ev.status <> 'cancelled';
   end if;
 
@@ -183,6 +191,7 @@ begin
       last_error = null,
       healthy = true
   where id = p_calendar_id;
+  return true;
 end;
 $$;
 
@@ -212,12 +221,12 @@ as $$
   returning id;
 $$;
 
-revoke all on function bell.apply_sync(uuid, jsonb, text[], text, boolean, timestamptz, timestamptz)
+revoke all on function bell.apply_sync(uuid, jsonb, text[], text, text, boolean, timestamptz, timestamptz, timestamptz)
   from public, anon, authenticated;
 revoke all on function bell.record_sync_failure(uuid, text) from public, anon, authenticated;
 revoke all on function bell.mark_push_stopped(timestamptz) from public, anon, authenticated;
 
-grant execute on function bell.apply_sync(uuid, jsonb, text[], text, boolean, timestamptz, timestamptz)
+grant execute on function bell.apply_sync(uuid, jsonb, text[], text, text, boolean, timestamptz, timestamptz, timestamptz)
   to service_role;
 grant execute on function bell.record_sync_failure(uuid, text) to service_role;
 grant execute on function bell.mark_push_stopped(timestamptz) to service_role;

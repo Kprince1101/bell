@@ -40,7 +40,7 @@ describe('0005 run records', () => {
     const seenAt = thisMinute().toISOString();
 
     await db.query(
-      "select bell.apply_sync($1, '[]'::jsonb, '{}', 'token-1', false, now(), $2)",
+      "select bell.apply_sync($1, '[]'::jsonb, '{}', null, 'token-1', false, now(), now() + interval '60 days', $2)",
       [calendarId, seenAt],
     );
     const afterSync = await lastRuns(db);

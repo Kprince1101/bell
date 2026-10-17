@@ -1,5 +1,11 @@
 import { GoogleApiError } from '@/lib/google/errors';
-import { fetchDelta, syncWindow } from '@/lib/sync/delta';
+import {
+  MAX_EVENT_PAGES,
+  fetchDelta,
+  fullSyncQuery,
+  sweepEnd,
+} from '@/lib/sync/delta';
+import { planDelta } from '@/lib/sync/normalize';
 import { syncCalendar } from '@/lib/sync/syncCalendar';
 import {
   ACCOUNT_ID,
@@ -8,28 +14,79 @@ import {
   calendarRow,
   createFakeServices,
   eventsPage,
+  fakeEventsList,
 } from '@/test-utils/calendarFakes';
 import {
+  FAR_FUTURE,
   OFFSITE,
   STANDUP,
   STANDUP_DELETED,
   STANDUP_MOVED,
   WEEKLY_SERIES_DELETED,
+  weeklySeries,
 } from '@/test-utils/googleFixtures';
 
-const WINDOW = {
-  timeMin: '2026-10-03T12:00:00.000Z',
-  timeMax: '2026-12-09T12:00:00.000Z',
-};
+const WINDOW = { timeMin: '2026-10-03T12:00:00.000Z' };
+const SWEEP_FLOOR = '2026-12-09T12:00:00.000Z';
 
-describe('syncWindow', () => {
-  it('spans 7 days back and 60 days ahead', () => {
-    expect(syncWindow(NOW)).toEqual(WINDOW);
+describe('fullSyncQuery', () => {
+  it('asks for everything ending after 7 days ago, with no upper bound', () => {
+    expect(fullSyncQuery(NOW)).toEqual(WINDOW);
+  });
+});
+
+describe('sweepEnd', () => {
+  it('reaches the furthest start returned, and at least 60 days ahead', () => {
+    const [far] = planDelta([FAR_FUTURE], 'UTC').upserts;
+    const [near] = planDelta([STANDUP], 'UTC').upserts;
+
+    expect(sweepEnd([], NOW)).toBe(SWEEP_FLOOR);
+    expect(sweepEnd([near], NOW)).toBe(SWEEP_FLOOR);
+    expect(sweepEnd([near, far], NOW)).toBe('2027-01-20T15:00:00.000Z');
   });
 });
 
 describe('fetchDelta', () => {
-  it('does a bounded full sync across pages when there is no sync token', async () => {
+  it('fetches an open-ended series beyond day 60, across every page', async () => {
+    const series = weeklySeries('2026-07-01T14:00:00Z', 52);
+    const listPage = vi.fn(fakeEventsList(series, 10));
+
+    const delta = await fetchDelta(
+      listPage,
+      { syncToken: null, timeZone: 'UTC' },
+      NOW,
+    );
+
+    const starts = delta.upserts.map((event) => event.starts_at);
+    expect(listPage).toHaveBeenCalledTimes(4);
+    listPage.mock.calls.forEach(([query]) => {
+      expect(query).not.toHaveProperty('timeMax');
+      expect(query.timeMin).toBe(WINDOW.timeMin);
+    });
+    expect(starts).toHaveLength(38);
+    expect(starts.filter((start) => start >= SWEEP_FLOOR)).toHaveLength(29);
+    expect(starts.at(-1)).toBe('2027-06-23T14:00:00.000Z');
+    expect(delta).toMatchObject({
+      mode: 'full',
+      nextSyncToken: 'sync-full',
+      windowEnd: '2027-06-23T14:00:00.000Z',
+    });
+  });
+
+  it('fails visibly instead of paging forever', async () => {
+    const listPage = vi
+      .fn()
+      .mockResolvedValue(
+        eventsPage({ nextPageToken: 'more', nextSyncToken: undefined }),
+      );
+
+    await expect(
+      fetchDelta(listPage, { syncToken: null, timeZone: 'UTC' }, NOW),
+    ).rejects.toThrow(`more than ${MAX_EVENT_PAGES} pages`);
+    expect(listPage).toHaveBeenCalledTimes(MAX_EVENT_PAGES);
+  });
+
+  it('does a full sync across pages when there is no sync token', async () => {
     const listPage = vi
       .fn()
       .mockResolvedValueOnce(
@@ -56,8 +113,10 @@ describe('fetchDelta', () => {
     expect(listPage).toHaveBeenNthCalledWith(2, { ...WINDOW, pageToken: 'p2' });
     expect(delta).toMatchObject({
       mode: 'full',
+      fromSyncToken: null,
       nextSyncToken: 'sync-9',
       windowStart: WINDOW.timeMin,
+      windowEnd: SWEEP_FLOOR,
       seenAt: NOW.toISOString(),
       cancelled: [],
     });
@@ -86,6 +145,7 @@ describe('fetchDelta', () => {
       pageToken: undefined,
     });
     expect(delta.mode).toBe('incremental');
+    expect(delta.fromSyncToken).toBe('sync-1');
     expect(delta.upserts[0].starts_at).toBe('2026-10-12T15:00:00.000Z');
     expect(delta.cancelled).toEqual(['weekly']);
     expect(delta.nextSyncToken).toBe('sync-2');
@@ -112,6 +172,7 @@ describe('fetchDelta', () => {
       pageToken: undefined,
     });
     expect(delta.mode).toBe('full');
+    expect(delta.fromSyncToken).toBe('stale');
     expect(delta.nextSyncToken).toBe('fresh');
   });
 
@@ -149,7 +210,7 @@ describe('syncCalendar', () => {
 
     const outcome = await syncCalendar(services, calendarRow(), 'webhook');
 
-    expect(outcome.ok).toBe(true);
+    expect(outcome).toMatchObject({ ok: true, applied: true });
     expect(google.refreshAccessToken).toHaveBeenCalledWith('refresh-1');
     expect(google.listEvents).toHaveBeenCalledWith('access-1', 'me@gmail.com', {
       syncToken: 'sync-1',
@@ -167,6 +228,60 @@ describe('syncCalendar', () => {
     expect(log).toHaveBeenCalledWith(
       `[bell] sync calendar=${CALENDAR_ID} trigger=webhook mode=incremental upserts=1 cancelled=1`,
     );
+  });
+
+  it('skips a delta another sync overtook, without counting a failure, and retries from the newer token', async () => {
+    const { services, google, repo, log } = createFakeServices();
+    repo.applySync.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    repo.calendarById.mockResolvedValue(calendarRow({ sync_token: 'sync-7' }));
+    google.listEvents.mockResolvedValue(
+      eventsPage({ items: [STANDUP_MOVED], nextSyncToken: 'sync-8' }),
+    );
+
+    const outcome = await syncCalendar(services, calendarRow(), 'webhook');
+
+    expect(outcome).toMatchObject({ ok: true, applied: true });
+    expect(repo.calendarById).toHaveBeenCalledWith(CALENDAR_ID);
+    expect(google.listEvents).toHaveBeenNthCalledWith(
+      2,
+      'access-1',
+      'me@gmail.com',
+      { syncToken: 'sync-7', pageToken: undefined },
+    );
+    expect(repo.applySync.mock.calls.map(([, d]) => d.fromSyncToken)).toEqual([
+      'sync-1',
+      'sync-7',
+    ]);
+    expect(repo.recordFailure).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      `[bell] sync-skipped calendar=${CALENDAR_ID} trigger=webhook reason=sync-token-changed attempt=1`,
+    );
+  });
+
+  it('gives up after one retry, still without a failure', async () => {
+    const { services, google, repo } = createFakeServices();
+    repo.applySync.mockResolvedValue(false);
+
+    const outcome = await syncCalendar(services, calendarRow(), 'webhook');
+
+    expect(outcome).toMatchObject({ ok: true, applied: false });
+    expect(google.listEvents).toHaveBeenCalledTimes(2);
+    expect(repo.applySync).toHaveBeenCalledTimes(2);
+    expect(repo.recordFailure).not.toHaveBeenCalled();
+  });
+
+  it('does not retry for a calendar dropped while the fetch ran', async () => {
+    const { services, google, repo } = createFakeServices();
+    repo.applySync.mockResolvedValue(false);
+    repo.calendarById.mockResolvedValue(
+      calendarRow({ active: false, sync_token: null }),
+    );
+
+    const outcome = await syncCalendar(services, calendarRow(), 'webhook');
+
+    expect(outcome).toMatchObject({ ok: true, applied: false });
+    expect(google.listEvents).toHaveBeenCalledTimes(1);
+    expect(repo.recordFailure).not.toHaveBeenCalled();
   });
 
   it('records the failure instead of storing a token when Google fails', async () => {

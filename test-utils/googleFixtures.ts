@@ -89,3 +89,31 @@ export const WEEKLY_SERIES_DELETED: GoogleEvent = {
   id: 'weekly',
   status: 'cancelled',
 };
+
+export const FAR_FUTURE: GoogleEvent = {
+  id: 'far-future',
+  summary: 'Annual review',
+  start: { dateTime: '2027-01-20T15:00:00Z' },
+  end: { dateTime: '2027-01-20T16:00:00Z' },
+};
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const HALF_HOUR_MS = 30 * 60 * 1000;
+
+export const weeklySeries = (
+  firstStart: string,
+  weeks: number,
+): GoogleEvent[] =>
+  Array.from({ length: weeks }, (_, week) => {
+    const startMs = Date.parse(firstStart) + week * WEEK_MS;
+    const start = new Date(startMs).toISOString();
+    return {
+      id: `series_${startMs}`,
+      status: 'confirmed',
+      summary: 'Series standup',
+      recurringEventId: 'series',
+      originalStartTime: { dateTime: start },
+      start: { dateTime: start },
+      end: { dateTime: new Date(startMs + HALF_HOUR_MS).toISOString() },
+    };
+  });

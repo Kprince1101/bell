@@ -1,8 +1,15 @@
 import { DELETE, PATCH } from '@/app/api/account/route';
 import { bellServices } from '@/lib/calendars/bellServices';
+import { UnreadableTokenError } from '@/lib/crypto/tokenCipher';
+import { GoogleApiError } from '@/lib/google/errors';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { createFakeServices } from '@/test-utils/calendarFakes';
+import {
+  ACCOUNT_ID,
+  CALENDAR_ID,
+  CHANNEL_ID,
+  createFakeServices,
+} from '@/test-utils/calendarFakes';
 import {
   USER_ID,
   createAdminFake,
@@ -70,6 +77,41 @@ describe('DELETE /api/account', () => {
     expect(await response.json()).toEqual({ deleted: true });
     expect(order).toEqual(['stopChannel', 'revokeToken', 'delete_me']);
     expect(google.repo.accountsForUser).toHaveBeenCalledWith(USER_ID);
+    expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
+  });
+
+  it('logs each Google failure and still wipes the account', async () => {
+    const { supabase, admin, google } = signedIn();
+    google.google.stopChannel.mockRejectedValue(
+      new GoogleApiError(503, 'Google 503'),
+    );
+    google.google.revokeToken.mockRejectedValue(
+      new GoogleApiError(503, 'Google 503'),
+    );
+
+    const response = await DELETE(jsonRequest('DELETE', { confirm: 'DELETE' }));
+
+    expect(response.status).toBe(200);
+    expect(google.log).toHaveBeenCalledWith(
+      `[bell] delete-me unwatch-failed calendar=${CALENDAR_ID} channel=${CHANNEL_ID} error=Google 503`,
+    );
+    expect(google.log).toHaveBeenCalledWith(
+      `[bell] delete-me revoke-failed account=${ACCOUNT_ID} error=Google 503`,
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith('delete_me');
+    expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
+  });
+
+  it('still wipes the account when the stored token cannot be decrypted', async () => {
+    const { supabase, admin, google } = signedIn();
+    google.repo.refreshToken.mockRejectedValue(new UnreadableTokenError());
+
+    const response = await DELETE(jsonRequest('DELETE', { confirm: 'DELETE' }));
+
+    expect(response.status).toBe(200);
+    expect(google.google.stopChannel).not.toHaveBeenCalled();
+    expect(google.google.revokeToken).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith('delete_me');
     expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(USER_ID);
   });
 

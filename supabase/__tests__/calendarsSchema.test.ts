@@ -1,22 +1,38 @@
 import type { PGlite } from '@electric-sql/pglite';
+import type { GoogleEvent } from '@/lib/google/schemas';
+import { fetchDelta } from '@/lib/sync/delta';
+import { shiftDays } from '@/lib/sync/zonedTime';
 import {
+  APPLY_SYNC,
   ME,
   NEIGHBOUR,
   WINDOW_START,
+  applyFrom,
   applySync,
   delta,
   events,
   migratedDb,
+  storedToken,
 } from '@/supabase/testing/calendarSeed';
 import { actAs, actAsOwner } from '@/supabase/testing/pglite';
+import { NOW, fakeEventsList } from '@/test-utils/calendarFakes';
 import {
+  FAR_FUTURE,
   OFFSITE,
   STANDUP,
   STANDUP_DELETED,
   STANDUP_MOVED,
   WEEKLY_INSTANCE,
   WEEKLY_SERIES_DELETED,
+  weeklySeries,
 } from '@/test-utils/googleFixtures';
+
+const SPRING_REVIEW: GoogleEvent = {
+  ...FAR_FUTURE,
+  id: 'spring-review',
+  start: { dateTime: '2027-03-01T15:00:00Z' },
+  end: { dateTime: '2027-03-01T16:00:00Z' },
+};
 
 const calendar = async (db: PGlite, calendarId: string) =>
   (
@@ -142,6 +158,121 @@ describe('0002_google_calendars apply_sync', () => {
     await db.close();
   });
 
+  it('a full resync never cancels events beyond the furthest start it fetched', async () => {
+    const { db, calendarId } = await migratedDb();
+    await applySync(
+      db,
+      calendarId,
+      delta([STANDUP, FAR_FUTURE], { seenAt: '2026-10-09T12:00:00.000Z' }),
+    );
+
+    await applySync(
+      db,
+      calendarId,
+      delta([OFFSITE], { mode: 'full', nextSyncToken: 'fresh' }),
+    );
+
+    expect(
+      (await events(db, calendarId)).map((row) => [row.event_id, row.status]),
+    ).toEqual([
+      ['far-future', 'confirmed'],
+      ['offsite', 'tentative'],
+      ['standup', 'cancelled'],
+    ]);
+    await db.close();
+  });
+
+  it('a full resync that fetched past a missing far event cancels it', async () => {
+    const { db, calendarId } = await migratedDb();
+    await applySync(
+      db,
+      calendarId,
+      delta([FAR_FUTURE], { seenAt: '2026-10-09T12:00:00.000Z' }),
+    );
+
+    await applySync(
+      db,
+      calendarId,
+      delta([OFFSITE, SPRING_REVIEW], { mode: 'full', nextSyncToken: 'fresh' }),
+    );
+
+    expect(
+      (await events(db, calendarId)).map((row) => [row.event_id, row.status]),
+    ).toEqual([
+      ['far-future', 'cancelled'],
+      ['offsite', 'tentative'],
+      ['spring-review', 'confirmed'],
+    ]);
+    await db.close();
+  });
+
+  it('keeps an existing open-ended series on the agenda long after day 60', async () => {
+    const { db, calendarId } = await migratedDb();
+    const listPage = fakeEventsList(
+      weeklySeries('2026-07-01T14:00:00Z', 52),
+      10,
+    );
+    const later = shiftDays(NOW, 90);
+
+    const connected = await fetchDelta(
+      listPage,
+      { syncToken: null, timeZone: 'UTC' },
+      NOW,
+    );
+    expect(await applyFrom(db, calendarId, connected)).toBe(true);
+    const quiet = await fetchDelta(
+      listPage,
+      { syncToken: await storedToken(db, calendarId), timeZone: 'UTC' },
+      later,
+    );
+    expect(quiet).toMatchObject({ mode: 'incremental', upserts: [] });
+    expect(await applyFrom(db, calendarId, quiet)).toBe(true);
+
+    const agenda = await db.query<{ starts_at: Date }>(
+      `select starts_at from bell.events
+       where calendar_id = $1 and status = 'confirmed'
+         and starts_at >= $2 and starts_at < $3
+       order by starts_at`,
+      [calendarId, later.toISOString(), shiftDays(later, 60).toISOString()],
+    );
+    expect(agenda.rows).toHaveLength(8);
+    expect(agenda.rows[0].starts_at.toISOString()).toBe(
+      '2027-01-13T14:00:00.000Z',
+    );
+    await db.close();
+  });
+
+  it('skips a delta another sync overtook, keeping its rows, token and health', async () => {
+    const { db, calendarId } = await migratedDb();
+    await applySync(
+      db,
+      calendarId,
+      delta([STANDUP], { nextSyncToken: 'sync-1' }),
+    );
+    const newer = delta([STANDUP_MOVED], {
+      fromSyncToken: 'sync-1',
+      nextSyncToken: 'sync-2',
+    });
+    const older = delta([STANDUP], {
+      fromSyncToken: 'sync-1',
+      nextSyncToken: 'sync-2-old',
+    });
+
+    expect(await applyFrom(db, calendarId, newer)).toBe(true);
+    expect(await applyFrom(db, calendarId, older)).toBe(false);
+
+    const [standup] = await events(db, calendarId);
+    expect(new Date(standup.starts_at).toISOString()).toBe(
+      '2026-10-12T15:00:00.000Z',
+    );
+    expect(await calendar(db, calendarId)).toMatchObject({
+      sync_token: 'sync-2',
+      fail_count: 0,
+      healthy: true,
+    });
+    await db.close();
+  });
+
   it('refuses an unknown calendar', async () => {
     const { db } = await migratedDb();
 
@@ -234,12 +365,14 @@ describe('0002_google_calendars access', () => {
       db.query("update bell.calendars set sync_token = 'x'"),
     ).rejects.toThrow();
     await expect(
-      db.query('select bell.apply_sync($1, $2, $3, $4, $5, $6, $7)', [
+      db.query(APPLY_SYNC, [
         calendarId,
         '[]',
         [],
+        null,
         't',
         false,
+        WINDOW_START,
         WINDOW_START,
         WINDOW_START,
       ]),

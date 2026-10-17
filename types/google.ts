@@ -8,7 +8,6 @@ import type {
 export interface EventsQuery {
   syncToken?: string;
   timeMin?: string;
-  timeMax?: string;
   pageToken?: string;
 }
 

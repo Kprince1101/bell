@@ -162,7 +162,7 @@ Check: `https://bell.dontpanic.fyi` loads the Bell sign-in page with a valid cer
 
 ## 8. Bell 1: Google calendars
 
-Bell never polls Google. Each included calendar has a watch channel that makes Google POST to `https://bell.dontpanic.fyi/api/webhooks/google` when something changes; Bell then pulls only the delta with the stored sync token. The only timer is the scheduler tick, and it only renews channels.
+Bell never polls Google. Each included calendar has a watch channel that makes Google POST to `https://bell.dontpanic.fyi/api/webhooks/google` when something changes; Bell then pulls only the delta with the stored sync token. The only timer is the scheduler tick, and it only renews channels. The one full sync per calendar (on connect, or after Google answers 410) fetches everything ending after 7 days ago with no upper bound, so a recurring series that never ends has its future instances stored up front and never needs a timed refetch as days pass.
 
 1. **Secrets.** Add the six Bell 1 variables from 5.2 to Vercel (Production; Preview too if you want to connect from a preview, but `BELL_APP_URL` must stay the verified domain because Google only delivers pushes there). Redeploy.
    - `BELL_TOKEN_KEY` encrypts every stored Google refresh token (AES-256-GCM, in `bell.account_secrets`, which only the service role can read). Keep a copy somewhere safe: if it is lost or changed, every connected account has to be disconnected and connected again.
@@ -182,7 +182,7 @@ Bell never polls Google. Each included calendar has a watch channel that makes G
       select title, starts_at, status, fingerprint from bell.events order by last_seen_at desc limit 5;
       ```
       shows it. Move it: same row, new `starts_at` and `fingerprint`. Delete it: same row, `status = 'cancelled'`.
-   4. Vercel → Logs, filter `[bell]`: every `[bell] sync` line says `trigger=webhook` or `trigger=connect`, never anything else; tick runs log only `[bell] watch`, `[bell] unwatch` and `[bell] tick` lines. That is the proof no calendar is fetched on a timer.
+   4. Vercel → Logs, filter `[bell]`: every `[bell] sync` and `[bell] sync-skipped` line says `trigger=webhook` or `trigger=connect`, never anything else; tick runs log only `[bell] watch`, `[bell] unwatch` and `[bell] tick` lines. That is the proof no calendar is fetched on a timer.
    5. Disconnect one account: its calendars and events are gone (`select count(*) from bell.events e join bell.calendars c on c.id = e.calendar_id where c.account_id = '<id>';` is 0) and it no longer appears under myaccount.google.com → Security → Third-party connections.
 
 ## 9. Bell 3: notifications that cannot be ignored

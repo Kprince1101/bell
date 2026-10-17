@@ -1,10 +1,12 @@
 import {
   disconnectAccount,
-  disconnectAllAccounts,
+  releaseAllAccounts,
 } from '@/lib/calendars/disconnect';
+import { UnreadableTokenError } from '@/lib/crypto/tokenCipher';
 import { GoogleApiError } from '@/lib/google/errors';
 import {
   ACCOUNT_ID,
+  CALENDAR_ID,
   CHANNEL_ID,
   accountRow,
   calendarRow,
@@ -69,6 +71,17 @@ describe('disconnectAccount', () => {
     expect(repo.deleteAccount).toHaveBeenCalledWith(ACCOUNT_ID);
   });
 
+  it('treats a refresh token Bell can no longer decrypt as already gone', async () => {
+    const { services, google, repo } = createFakeServices();
+    repo.refreshToken.mockRejectedValue(new UnreadableTokenError());
+
+    await disconnectAccount(services, accountRow());
+
+    expect(google.stopChannel).not.toHaveBeenCalled();
+    expect(google.revokeToken).not.toHaveBeenCalled();
+    expect(repo.deleteAccount).toHaveBeenCalledWith(ACCOUNT_ID);
+  });
+
   it('keeps everything when Google cannot be reached, so the user can retry', async () => {
     const { services, google, repo } = createFakeServices();
     google.revokeToken.mockRejectedValue(new GoogleApiError(503, 'Google 503'));
@@ -80,17 +93,47 @@ describe('disconnectAccount', () => {
   });
 });
 
-describe('disconnectAllAccounts', () => {
-  it('disconnects each of the user accounts', async () => {
-    const { services, repo, google } = createFakeServices();
-    const other = accountRow({ id: 'aaaaaaaa-0000-0000-0000-000000000002' });
-    repo.accountsForUser.mockResolvedValue([accountRow(), other]);
+describe('releaseAllAccounts', () => {
+  const OTHER = accountRow({ id: 'aaaaaaaa-0000-0000-0000-000000000002' });
 
-    await disconnectAllAccounts(services, USER_ID);
+  it('stops the channels and revokes the token of each account, leaving the rows to delete_me', async () => {
+    const { services, repo, google } = createFakeServices();
+    repo.accountsForUser.mockResolvedValue([accountRow(), OTHER]);
+
+    await releaseAllAccounts(services, USER_ID);
 
     expect(repo.accountsForUser).toHaveBeenCalledWith(USER_ID);
+    expect(repo.calendarsForAccount).toHaveBeenNthCalledWith(1, ACCOUNT_ID);
+    expect(repo.calendarsForAccount).toHaveBeenNthCalledWith(2, OTHER.id);
+    expect(google.stopChannel).toHaveBeenCalledTimes(2);
     expect(google.revokeToken).toHaveBeenCalledTimes(2);
-    expect(repo.deleteAccount).toHaveBeenNthCalledWith(1, ACCOUNT_ID);
-    expect(repo.deleteAccount).toHaveBeenNthCalledWith(2, other.id);
+    expect(repo.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('logs every failure and keeps going', async () => {
+    const { services, repo, google, log } = createFakeServices();
+    repo.accountsForUser.mockResolvedValue([accountRow(), OTHER]);
+    repo.calendarsForAccount
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce([calendarRow(), SECOND_CALENDAR]);
+    google.stopChannel
+      .mockRejectedValueOnce(new GoogleApiError(503, 'Google 503'))
+      .mockResolvedValueOnce(undefined);
+    google.revokeToken.mockRejectedValue(new GoogleApiError(500, 'Google 500'));
+
+    await expect(releaseAllAccounts(services, USER_ID)).resolves.toBe(
+      undefined,
+    );
+
+    expect(log).toHaveBeenCalledWith(
+      `[bell] delete-me release-failed account=${ACCOUNT_ID} error=db down`,
+    );
+    expect(log).toHaveBeenCalledWith(
+      `[bell] delete-me unwatch-failed calendar=${CALENDAR_ID} channel=${CHANNEL_ID} error=Google 503`,
+    );
+    expect(google.stopChannel).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      `[bell] delete-me revoke-failed account=${OTHER.id} error=Google 500`,
+    );
   });
 });

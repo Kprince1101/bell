@@ -1,12 +1,14 @@
 import type { PGlite } from '@electric-sql/pglite';
 import type { GoogleEvent } from '@/lib/google/schemas';
 import { readMigrations, runMigrations } from '@/lib/migrations';
+import { sweepEnd } from '@/lib/sync/delta';
 import { planDelta } from '@/lib/sync/normalize';
 import {
   MIGRATIONS_DIR,
   asMigrationDb,
   createSupabaseDb,
 } from '@/supabase/testing/pglite';
+import { NOW } from '@/test-utils/calendarFakes';
 import type { EventRow, SyncDelta } from '@/types/calendar';
 
 export const ME = '11111111-1111-1111-1111-111111111111';
@@ -64,30 +66,59 @@ export const migratedDb = async (
 export const delta = (
   items: GoogleEvent[],
   overrides: Partial<SyncDelta> = {},
-): SyncDelta => ({
-  mode: 'incremental',
-  ...planDelta(items, 'UTC'),
-  nextSyncToken: 'sync-next',
-  windowStart: WINDOW_START,
-  seenAt: '2026-10-10T12:00:00.000Z',
-  ...overrides,
-});
+): SyncDelta => {
+  const planned = planDelta(items, 'UTC');
+  return {
+    mode: 'incremental',
+    ...planned,
+    fromSyncToken: null,
+    nextSyncToken: 'sync-next',
+    windowStart: WINDOW_START,
+    windowEnd: sweepEnd(planned.upserts, NOW),
+    seenAt: NOW.toISOString(),
+    ...overrides,
+  };
+};
+
+export const APPLY_SYNC =
+  'select bell.apply_sync($1, $2, $3, $4, $5, $6, $7, $8, $9) as applied';
+
+export const applyFrom = async (
+  db: PGlite,
+  calendarId: string,
+  change: SyncDelta,
+) =>
+  (
+    await db.query<{ applied: boolean }>(APPLY_SYNC, [
+      calendarId,
+      JSON.stringify(change.upserts),
+      change.cancelled,
+      change.fromSyncToken,
+      change.nextSyncToken,
+      change.mode === 'full',
+      change.windowStart,
+      change.windowEnd,
+      change.seenAt,
+    ])
+  ).rows[0].applied;
+
+export const storedToken = async (db: PGlite, calendarId: string) =>
+  (
+    await db.query<{ sync_token: string | null }>(
+      'select sync_token from bell.calendars where id = $1',
+      [calendarId],
+    )
+  ).rows[0]?.sync_token ?? null;
 
 export const applySync = async (
   db: PGlite,
   calendarId: string,
   change: SyncDelta,
-) => {
-  await db.query('select bell.apply_sync($1, $2, $3, $4, $5, $6, $7)', [
-    calendarId,
-    JSON.stringify(change.upserts),
-    change.cancelled,
-    change.nextSyncToken,
-    change.mode === 'full',
-    change.windowStart,
-    change.seenAt,
-  ]);
-};
+) =>
+  applyFrom(db, calendarId, {
+    ...change,
+    fromSyncToken: await storedToken(db, calendarId),
+  });
 
 export const events = async (db: PGlite, calendarId: string) =>
   (

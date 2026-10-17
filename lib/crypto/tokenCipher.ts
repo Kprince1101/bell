@@ -33,17 +33,28 @@ export const encryptToken = (plain: string, key: Buffer): string => {
   ].join('.');
 };
 
+export class UnreadableTokenError extends Error {
+  constructor() {
+    super('Unreadable stored token');
+    this.name = 'UnreadableTokenError';
+  }
+}
+
 export const decryptToken = (stored: string, key: Buffer): string => {
   const [version, iv, tag, sealed] = stored.split('.');
   if (version !== CIPHER_VERSION || !iv || !tag || !sealed) {
-    throw new Error('Unreadable stored token');
+    throw new UnreadableTokenError();
   }
-  const decipher = createDecipheriv(CIPHER, key, Buffer.from(iv, 'base64'));
-  decipher.setAuthTag(Buffer.from(tag, 'base64'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(sealed, 'base64')),
-    decipher.final(),
-  ]).toString('utf8');
+  try {
+    const decipher = createDecipheriv(CIPHER, key, Buffer.from(iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(sealed, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    throw new UnreadableTokenError();
+  }
 };
 
 export const signValue = (value: string, secret: string): string =>

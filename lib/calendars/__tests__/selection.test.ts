@@ -38,9 +38,9 @@ describe('applyCalendarChoices', () => {
 
     expect(repo.saveChoice).toHaveBeenCalledWith(choice());
     expect(google.listEvents).toHaveBeenCalledTimes(1);
-    expect(google.listEvents.mock.calls[0][2]).toMatchObject({
+    expect(google.listEvents.mock.calls[0][2]).toEqual({
       timeMin: '2026-10-03T12:00:00.000Z',
-      timeMax: '2026-12-09T12:00:00.000Z',
+      pageToken: undefined,
     });
     expect(repo.applySync).toHaveBeenCalledWith(
       CALENDAR_ID,

@@ -481,12 +481,14 @@ export type Database = {
           p_calendar_id: string;
           p_events: Json;
           p_cancelled: string[];
+          p_from_sync_token: string | null;
           p_sync_token: string;
           p_full: boolean;
           p_window_start: string;
+          p_window_end: string;
           p_seen_at: string;
         };
-        Returns: undefined;
+        Returns: boolean;
       };
       mark_push_stopped: {
         Args: { p_now: string };

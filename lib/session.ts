@@ -29,6 +29,12 @@ export const requireOwnerInvites = async (): Promise<Invite[]> => {
   return listInvites(supabase);
 };
 
+export const requireOwnerUser = async (): Promise<BellUser> => {
+  const { user, isOwner: owner } = await loadAppShell();
+  if (!owner) notFound();
+  return user;
+};
+
 export const redirectIfSignedIn = async (): Promise<void> => {
   const user = await getBellUser(await createClient());
   if (user) redirect('/');

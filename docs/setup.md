@@ -1,10 +1,50 @@
-# Bell setup
+# Bell runbook
 
-These steps need an account only the owner holds: Supabase, Google Cloud, Vercel, and DNS for `dontpanic.fyi`. Do them in order; each section ends with what to check before moving on.
+This is how Bell goes live and how to tell whether it is running. The go-live checklist comes first. Sections 1 to 9 hold the detail it points to, section 10 explains the Health page, and section 11 is what to check when a notification did not arrive. Section 12 covers the agenda (Bell 2) and section 13 sharing a calendar with a teammate (Bell 4).
 
-Bell lives in the existing Commander Supabase project, entirely inside its own `bell` schema. Nothing in this repo names the project: its URL, keys and ref come from env (`.env.local` locally, Vercel and GitHub secrets in the cloud). Below, `<ref>` means that project's ref.
+These steps need an account only the owner holds: Supabase, Google Cloud, Vercel, DNS for `dontpanic.fyi`, Slack, Pushover and Twilio.
+
+Bell lives in the existing Commander Supabase project, entirely inside its own `bell` schema. Nothing in this repo names the project: its URL, keys and ref come from env (`.env.local` locally, Vercel and GitHub secrets in the cloud). Below, `<ref>` means that project's ref. The repo is public, so it holds secret names only, never values.
 
 **No project-wide auth setting changes for Bell.** "Allow new users to sign up" stays off, no auth hook is added, the Site URL and email templates stay as they are. Bell decides who gets in with its own `bell.allowlist`, checked in Bell's code.
+
+## Go-live checklist
+
+**A. Accounts, once.** Skip whatever is already done. Each line points to the section with the clicks.
+
+- [ ] `.env.local` filled in for the Commander project, and `bell` added to its **Exposed schemas** without removing any (1.1, 1.2).
+- [ ] You are on `bell.allowlist` as `owner` (1.4).
+- [ ] Google Cloud: Calendar API on; consent screen with `openid email profile` and both Calendar scopes; OAuth client with Bell's redirect URIs; `bell.dontpanic.fyi` domain-verified; app **published** (3, 8.3).
+- [ ] Supabase Auth: Google provider on, and Bell's redirect URLs **added alongside Commander's**. Signups stay off and no other auth setting changes (4).
+- [ ] Vercel project with the domain, and DNS records for `bell` and the Google TXT (5.1, 5.3, 6).
+- [ ] Slack app with its redirect URL, interactivity URL and public distribution (9.1). Pushover application (9.2). Twilio number with Voice and SMS, registered for A2P 10DLC or toll-free verified (9.3).
+
+**B. Go live, about ten minutes.**
+
+1. [ ] **Migrate.** Run `npm run db:migrate`. It applies whatever is pending in file-name order and ends with `N migration(s) applied.`. Check `select name from bell.migrations order by name;`: it lists every file in `supabase/migrations`, `0001` through `0006`. The **Migrate** workflow does the same on each merge to `main` once `DATABASE_URL` is a repository secret.
+2. [ ] **Deploy functions.** Run `npm run deploy:functions`, which reads `SUPABASE_PROJECT_REF` from `.env.local`.
+   - It deploys every `bell-*` folder in `supabase/functions` to that project.
+   - It then prints each function's secrets as `set` or `MISSING`, names only, and exits non-zero if any is missing. Set those with `supabase secrets set --project-ref <ref> NAME=value`.
+   - Bell ships no edge functions today, because the scheduler and every webhook are Next.js routes. So it prints `nothing to deploy` and lists the app secrets, which belong in Vercel instead.
+3. [ ] **Set the secrets in Vercel.** Settings → Environment Variables, Production, then Redeploy. Every name under `app` in `supabase/functions/secrets.json` must be set; the tables in 5.2 and 9.4 say where each value comes from. The ones people forget:
+   - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (9.3)
+   - `PUSHOVER_APP_TOKEN` (9.2)
+   - `CRON_SECRET`, which must match the value stored in Vault in step 4
+4. [ ] **Verify the cron job.** If 9.5 has not been run yet, run it now. Then in the SQL editor:
+   ```sql
+   select jobname, schedule, active from cron.job where jobname = 'bell-notify';
+   select d.status, d.return_message, d.start_time
+   from cron.job_run_details d join cron.job j on j.jobid = d.jobid
+   where j.jobname = 'bell-notify' order by d.start_time desc limit 3;
+   ```
+   Expect one job, `* * * * *`, active, with runs that `succeeded` within the last minute. Vercel → Logs shows a `[bell] notify-tick` line every minute. Commander's own cron jobs are untouched; only `bell-notify` is Bell's.
+5. [ ] **Twilio webhook URLs.** On the number, set Messaging → A message comes in → `https://bell.dontpanic.fyi/api/webhooks/twilio/sms`, HTTP POST. Leave Voice unset: Bell gives each call its own callback to `/api/webhooks/twilio/voice`.
+6. [ ] **Google OAuth.** The client's redirect URIs include `https://<ref>.supabase.co/auth/v1/callback` and `https://bell.dontpanic.fyi/api/google/callback`, and the app is in production. Supabase's Redirect URLs list still has every Commander entry, plus `https://bell.dontpanic.fyi/auth/callback**`.
+7. [ ] **Sign in** at `https://bell.dontpanic.fyi` as the owner. The header shows **Invites** and **Health**. Invite anyone else from **Invites** (section 2); nobody is added through auth settings.
+8. [ ] **Add the first source.** Calendars → **Connect a Google account** → consent → tick at least one calendar → **Save calendars**. It shows "Last synced ..." within seconds.
+9. [ ] **Channels.** On Notifications, **Add to Slack**, paste your Pushover user key, enter your mobile number, and press **Test** on each channel. Each test must arrive.
+10. [ ] **Send a test notification.** Create a meeting 3 minutes out on an included calendar. Within a minute the Pushover emergency push and the SMS arrive. Acknowledge the push, and no call comes.
+11. [ ] **Health is all green.** Open Health. Every row should be green, or grey for a channel you switched off on purpose. A red row names what to fix, and section 10 explains each one.
 
 ## 1. Supabase: expose the `bell` schema and apply the bell migrations
 
@@ -209,7 +249,59 @@ Bell owns one Slack app, one Pushover application and one Twilio number. Every c
       ```
    5. Move one of your meetings by 15 minutes inside the next two hours: one push says it moved, and its steps follow the new time. Delete a meeting: nothing more rings for it. Mark its calendar quiet under Notifications → Quiet calendars: nothing rings for that calendar.
 
-## 10. Bell 2: agenda
+## 10. Health
+
+**Health** lives at `/health` and appears in the header only for an `owner` on `bell.allowlist`, the same role that sees Invites. The page reads everything through `GET /api/health`, a service-role route that answers 403 to anyone else. **Check again** re-reads it.
+
+Each row is red when something is wrong, grey when it is off on purpose, and green otherwise. Anything that should happen every minute turns red once it is more than 5 minutes old.
+
+| Row                          | Green means                                                                               | When it is red                                                                                                                                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pg_cron job bell-notify      | `cron.job` has `bell-notify`, active                                                      | Enable pg_cron and pg_net and run the `cron.schedule` in 9.5                                                                                                                                                                                            |
+| Last cron run                | the latest `bell-notify` run in `cron.job_run_details` succeeded, less than 5 minutes ago | The message is Postgres's. An old run means the job is off or pg_cron is stuck                                                                                                                                                                          |
+| bell-notify (scheduler tick) | `/api/tick` finished less than 5 minutes ago                                              | It shows the error the tick hit. If the cron run is green but this is stale, the tick is being refused: the Vault `bell_cron_secret` differs from Vercel's `CRON_SECRET`, or `bell_tick_url` is wrong. Vercel → Logs has the `[bell] notify-tick` lines |
+| bell-sync (Google push sync) | the last calendar sync succeeded                                                          | It shows Google's error. This row does not age: Bell syncs only when Google pushes, so a quiet hour is normal                                                                                                                                           |
+| Last notification sent       | at least one notification has been sent                                                   | Do go-live step 10                                                                                                                                                                                                                                      |
+| Delivery failures            | no failure since the last notification sent                                               | It names the channel and the provider's error; see section 11                                                                                                                                                                                           |
+| Your channels                | each channel's last **Test** went through                                                 | Press Test on Notifications. A failure shows the provider's error                                                                                                                                                                                       |
+| Your calendars               | each included calendar is healthy and has a live push channel                             | Unhealthy shows the sync error. A missing or expired channel is renewed by the next tick; otherwise disconnect and reconnect                                                                                                                            |
+| App secrets (names only)     | every name under `app` in `supabase/functions/secrets.json` is set in this deployment     | Set it in Vercel and redeploy. Health never reads out a value, only whether it is set                                                                                                                                                                   |
+
+Where the data comes from:
+
+- The tick records its last run in `bell.job_runs` as `bell-notify`.
+- Every calendar sync and every sync failure records `bell-sync` in the same table.
+- Each **Test** stores its result in `bell.channel_tests`.
+
+Migration `0005` adds both tables and `bell.health_report`. It is the only Bell function that reads the `cron` schema, and it looks only at the job named `bell-notify`. Health does not read `net._http_response`, because in the shared project that table also holds Commander's requests.
+
+## 11. When a notification did not arrive
+
+1. **Open Health.** If any Scheduler or Jobs row is red, fix that first: nothing is sent without the tick.
+2. **Find the meeting's steps** in the SQL editor:
+   ```sql
+   select e.title, e.starts_at, e.status, n.step, n.channel, n.due_at, n.claimed_at, n.result, n.error, n.sent_at, n.acknowledged_at
+   from bell.events e left join bell.notifications n on n.event_id = e.id
+   where e.title ilike '%<part of the title>%'
+   order by e.starts_at desc, n.due_at;
+   ```
+3. **Read the result.**
+   - **No event row.** Bell never heard about the meeting. Check its calendar under Health → Your calendars, and make sure it is ticked on Calendars. If bell-sync is red with `invalid_grant`, connect that Google account again.
+   - **An event row but no steps.** The calendar is quiet, the meeting is all-day or cancelled, or no channel was on with a key or number saved. Check Notifications.
+   - **`claimed_at` is empty after `due_at`.** The tick is not running: see Health → Scheduler.
+   - **`skipped`, with error `late` or `superseded`.** The tick was down when the step was due, and after an outage Bell sends only the latest step. Find out why the tick stopped.
+   - **`cancelled`.** The meeting was cancelled or moved, its calendar went quiet, or that channel was switched off.
+   - **`failed`.** `error` holds the provider's answer, and Bell tried the next channel (that row has `fallback_for` set). Press **Test** on the failed channel.
+     - Twilio errors usually mean the number is not registered for A2P 10DLC (9.3) or the phone number is wrong.
+     - Pushover errors mean a bad user key or a bad `PUSHOVER_APP_TOKEN`.
+     - Slack `not_in_channel` or `account_inactive` means you need to Add to Slack again.
+   - **`sent`, but nothing arrived.** Bell handed it to the provider, so look there.
+     - Pushover: the app must be installed and signed in on the phone.
+     - Twilio: Console → Monitor → Logs → Messaging or Calls shows the delivery status.
+     - Slack: the DM comes from the Bell app, in the workspace you connected.
+4. **Acknowledged too early?** `acknowledged_at` and `acknowledged_by` say who stopped it: a Slack button, the Pushover receipt, an SMS reply, a keypress on the call, or the app.
+
+## 12. Bell 2: agenda
 
 The agenda at `/` shows today and the next 7 days from every included calendar, in the time zone set on Account. It updates live: the browser subscribes to Supabase Realtime changes on `bell.events` for the signed-in user (RLS decides what it may see) and reloads the agenda when a sync lands.
 
@@ -226,7 +318,7 @@ The agenda at `/` shows today and the next 7 days from every included calendar, 
    4. Move, cancel or create an event in Google Calendar. Within seconds, without reloading, the card shows **Moved** with the old time struck through, **Cancelled** with the title struck through, or **New**.
    5. Calendars → tick **Pause** on one calendar → Save: its events leave the agenda; untick to bring them back.
 
-## 11. Bell 4: sharing a calendar with a teammate
+## 13. Bell 4: sharing a calendar with a teammate
 
 A share is a row in `bell.calendar_shares` (calendar, the teammate it is shared with, who shared it), never a copy of the events. The sharer's watch channel keeps the events fresh; the teammate's agenda and scheduler read "my calendars plus calendars shared with me". The teammate never sees the sharer's Google account, refresh token or other calendars: they get the shared calendar's label and color through `bell.shared_with_me()` and its events through an RLS policy on `bell.events`.
 
@@ -238,9 +330,13 @@ A share is a row in `bell.calendar_shares` (calendar, the teammate it is shared 
    3. On the shared calendar, create a meeting 35 minutes out. Each person gets their own Slack DM and push on their own channels and in their own time zone; acknowledging on one side does not silence the other. Marking the calendar quiet silences only the sharer.
    4. The sharer presses **Stop sharing** (or the teammate presses **Remove**): the meetings leave the teammate's agenda and nothing more rings for them; `select result, error from bell.notifications where user_id = '<teammate id>' order by created_at desc limit 7;` shows `cancelled` / `share removed`.
    5. If the sharer deletes their Bell account (Account → Delete), the shares, the shared events and every notification queued for the teammate go with it.
+4. **Sharing tells you who has a Bell account.** Sharing with an email nobody uses in Bell fails with "Nobody with that email uses Bell yet", and with a real account it succeeds. So any signed-in user can find out whether an email belongs to a Bell user (`bell.share_calendar` returns `unknown_user` or `shared`). That is acceptable: everyone who can sign in was invited by the owner, and they learn nothing else about that person, so the clearer message wins over a uniform one.
 
 ## Conventions
 
 - **Migrations** live in `supabase/migrations/NNNN_name.sql`, create objects only in the `bell` schema, and are applied by `npm run db:migrate`.
 - **Types**: after a migration, `SUPABASE_PROJECT_REF=<ref> npm run db:types` regenerates `types/supabase.ts` (needs `supabase login`).
-- **Edge functions** in this repo are named `bell-*` under `supabase/functions/` and deployed with `SUPABASE_PROJECT_REF=<ref> npm run functions:deploy`. Bell 0 ships none.
+- **Edge functions** are named `bell-*` under `supabase/functions/`.
+  - Each one needs an entry in `supabase/functions/secrets.json` that lists the secret names it reads. `npm run deploy:functions` refuses to deploy if a folder and the manifest disagree.
+  - Deploy them with `npm run deploy:functions`, which takes the project from `SUPABASE_PROJECT_REF`.
+  - Bell has no edge functions today.

@@ -140,4 +140,27 @@ export const createNotifyRepo = (admin: AdminClient): NotifyRepo => ({
         }),
       ),
     ),
+
+  recordJobRun: async ({ job, ok, detail, at }) => {
+    unwrap(
+      await admin.rpc('record_job_run', {
+        p_job: job,
+        p_ok: ok,
+        p_detail: detail,
+        p_at: at,
+      }),
+    );
+  },
+
+  recordChannelTest: async ({ userId, kind, ok, error, at }) => {
+    unwrap(
+      await admin.rpc('record_channel_test', {
+        p_user_id: userId,
+        p_kind: kind,
+        p_ok: ok,
+        p_error: error,
+        p_at: at,
+      }),
+    );
+  },
 });

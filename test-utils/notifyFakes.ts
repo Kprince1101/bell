@@ -104,6 +104,10 @@ export const createFakeNotifyRepo = () => {
       async () => undefined,
     ),
     setCalendarQuiet: vi.fn<NotifyRepo['setCalendarQuiet']>(async () => true),
+    recordJobRun: vi.fn<NotifyRepo['recordJobRun']>(async () => undefined),
+    recordChannelTest: vi.fn<NotifyRepo['recordChannelTest']>(
+      async () => undefined,
+    ),
   };
   return repo;
 };

@@ -188,7 +188,13 @@ describe('PUT /api/calendars', () => {
     const response = await PUT(
       put({
         calendars: [
-          { id: CALENDAR_ID, active: true, label: ' Work ', color: '#AABBCC' },
+          {
+            id: CALENDAR_ID,
+            active: true,
+            paused: true,
+            label: ' Work ',
+            color: '#AABBCC',
+          },
         ],
       }),
     );
@@ -198,9 +204,25 @@ describe('PUT /api/calendars', () => {
     expect(repo.saveChoice).toHaveBeenCalledWith({
       id: CALENDAR_ID,
       active: true,
+      paused: true,
       label: 'Work',
       color: '#aabbcc',
     });
+  });
+
+  it('rejects a choice without its paused state', async () => {
+    const { repo } = setup();
+
+    const response = await PUT(
+      put({
+        calendars: [
+          { id: CALENDAR_ID, active: true, label: 'x', color: '#aabbcc' },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(repo.saveChoice).not.toHaveBeenCalled();
   });
 
   it('rejects a bad color', async () => {
@@ -209,7 +231,13 @@ describe('PUT /api/calendars', () => {
     const response = await PUT(
       put({
         calendars: [
-          { id: CALENDAR_ID, active: true, label: 'x', color: 'red' },
+          {
+            id: CALENDAR_ID,
+            active: true,
+            paused: false,
+            label: 'x',
+            color: 'red',
+          },
         ],
       }),
     );

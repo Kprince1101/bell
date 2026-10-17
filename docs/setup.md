@@ -1,6 +1,6 @@
 # Bell runbook
 
-This is how Bell goes live and how to tell whether it is running. The go-live checklist comes first. Sections 1 to 9 hold the detail it points to, section 10 explains the Health page, and section 11 is what to check when a notification did not arrive.
+This is how Bell goes live and how to tell whether it is running. The go-live checklist comes first. Sections 1 to 9 hold the detail it points to, section 10 explains the Health page, and section 11 is what to check when a notification did not arrive. Section 12 covers the agenda (Bell 2) and section 13 sharing a calendar with a teammate (Bell 4).
 
 These steps need an account only the owner holds: Supabase, Google Cloud, Vercel, DNS for `dontpanic.fyi`, Slack, Pushover and Twilio.
 
@@ -21,7 +21,7 @@ Bell lives in the existing Commander Supabase project, entirely inside its own `
 
 **B. Go live, about ten minutes.**
 
-1. [ ] **Migrate.** Run `npm run db:migrate`. It applies whatever is pending in file-name order and ends with `N migration(s) applied.`. Check `select name from bell.migrations order by name;`: it lists every file in `supabase/migrations`, at least `0001`, `0002`, `0004` and `0005`. The **Migrate** workflow does the same on each merge to `main` once `DATABASE_URL` is a repository secret.
+1. [ ] **Migrate.** Run `npm run db:migrate`. It applies whatever is pending in file-name order and ends with `N migration(s) applied.`. Check `select name from bell.migrations order by name;`: it lists every file in `supabase/migrations`, `0001` through `0006`. The **Migrate** workflow does the same on each merge to `main` once `DATABASE_URL` is a repository secret.
 2. [ ] **Deploy functions.** Run `npm run deploy:functions`, which reads `SUPABASE_PROJECT_REF` from `.env.local`.
    - It deploys every `bell-*` folder in `supabase/functions` to that project.
    - It then prints each function's secrets as `set` or `MISSING`, names only, and exits non-zero if any is missing. Set those with `supabase secrets set --project-ref <ref> NAME=value`.
@@ -300,6 +300,37 @@ Migration `0005` adds both tables and `bell.health_report`. It is the only Bell 
      - Twilio: Console → Monitor → Logs → Messaging or Calls shows the delivery status.
      - Slack: the DM comes from the Bell app, in the workspace you connected.
 4. **Acknowledged too early?** `acknowledged_at` and `acknowledged_by` say who stopped it: a Slack button, the Pushover receipt, an SMS reply, a keypress on the call, or the app.
+
+## 12. Bell 2: agenda
+
+The agenda at `/` shows today and the next 7 days from every included calendar, in the time zone set on Account. It updates live: the browser subscribes to Supabase Realtime changes on `bell.events` for the signed-in user (RLS decides what it may see) and reloads the agenda when a sync lands.
+
+1. **Migration 0003.** `npm run db:migrate` prints `applied 0003_agenda.sql` (or the **Migrate** workflow does it on merge). It adds:
+   - `bell.events.changed_at` and `previous_starts_at`, stamped by a trigger whenever a sync adds, moves or cancels an event after the calendar's first sync. The agenda marks those changes for 24 hours.
+   - `bell.calendars.paused`: a paused calendar keeps syncing but is hidden from the agenda.
+   - `bell.agenda_visits`: when each user last looked, so "since you last looked" survives reloads.
+   - `bell.events` in the `supabase_realtime` publication.
+2. **Realtime.** Adding `bell.events` to the project's `supabase_realtime` publication is the one change 0003 makes outside the `bell` schema. It only adds that table; every table already in the publication stays as it was. Check: Database → Publications → `supabase_realtime` lists `bell.events`. If the migration ran before the publication existed, run `alter publication supabase_realtime add table bell.events;` in the SQL editor. Nothing else needs turning on; the browser uses the anon key and the user's session.
+3. **Prove it.**
+   1. With two Google accounts connected and three calendars included, invite both of your accounts to one meeting. The agenda shows it once, with both calendars' badges.
+   2. Create an event at 1:00 PM in Google Calendar with its time zone set to Eastern (TZID `America/New_York`) while your Account time zone is Central. Its card shows a red flag: `12:00 PM CT · invite says 1:00 PM ET`.
+   3. Open the agenda on a phone: the next event is pinned at the top and its countdown ticks every second.
+   4. Move, cancel or create an event in Google Calendar. Within seconds, without reloading, the card shows **Moved** with the old time struck through, **Cancelled** with the title struck through, or **New**.
+   5. Calendars → tick **Pause** on one calendar → Save: its events leave the agenda; untick to bring them back.
+
+## 13. Bell 4: sharing a calendar with a teammate
+
+A share is a row in `bell.calendar_shares` (calendar, the teammate it is shared with, who shared it), never a copy of the events. The sharer's watch channel keeps the events fresh; the teammate's agenda and scheduler read "my calendars plus calendars shared with me". The teammate never sees the sharer's Google account, refresh token or other calendars: they get the shared calendar's label and color through `bell.shared_with_me()` and its events through an RLS policy on `bell.events`.
+
+1. **Migration 0006.** `npm run db:migrate` prints `applied 0006_calendar_shares.sql` (or the **Migrate** workflow does it on merge). It adds `bell.calendar_shares`, the shared-events read policy, per-person notification rows (`unique (event_id, user_id, step, channel)`), and extends `bell.delete_me()` to drop every share the user made or received (it still returns `false`, keeping the auth user, for someone with a Commander profile). Everything it creates lives in the `bell` schema; realtime needs nothing new.
+2. **Invite the teammate.** Signed in as the owner, open **Invites** and add their email (section 2). They sign in once (Bell 0), keeping their existing login if they already use Commander, connect their own Google accounts if they have any (Bell 1), and set up their own Slack, Pushover, SMS and call channels under Notifications (Bell 3).
+3. **Prove it.**
+   1. Signed in as the sharer: Calendars → **Sharing** → type the teammate's email next to an included calendar → **Share**. The calendar now lists their email with **Stop sharing**.
+   2. Signed in as the teammate: the agenda shows that calendar's meetings badged `<label> · shared`, and nothing from the sharer's other calendars. Calendars → **Sharing** → **Shared with you** lists it. The sharer's Google account appears nowhere.
+   3. On the shared calendar, create a meeting 35 minutes out. Each person gets their own Slack DM and push on their own channels and in their own time zone; acknowledging on one side does not silence the other. Marking the calendar quiet silences only the sharer.
+   4. The sharer presses **Stop sharing** (or the teammate presses **Remove**): the meetings leave the teammate's agenda and nothing more rings for them; `select result, error from bell.notifications where user_id = '<teammate id>' order by created_at desc limit 7;` shows `cancelled` / `share removed`.
+   5. If the sharer deletes their Bell account (Account → Delete), the shares, the shared events and every notification queued for the teammate go with it.
+4. **Sharing tells you who has a Bell account.** Sharing with an email nobody uses in Bell fails with "Nobody with that email uses Bell yet", and with a real account it succeeds. So any signed-in user can find out whether an email belongs to a Bell user (`bell.share_calendar` returns `unknown_user` or `shared`). That is acceptable: everyone who can sign in was invited by the owner, and they learn nothing else about that person, so the clearer message wins over a uniform one.
 
 ## Conventions
 

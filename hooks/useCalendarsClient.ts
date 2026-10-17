@@ -1,9 +1,11 @@
 import type { ChangeEvent } from 'react';
 import { useCalendarChoices } from '@/hooks/useCalendarChoices';
+import { useCalendarSharing } from '@/hooks/useCalendarSharing';
 import { useDisconnectAccount } from '@/hooks/useDisconnectAccount';
 import type {
   CalendarChoice,
   CalendarHealth,
+  CalendarView,
   CalendarsClientProps,
 } from '@/types/calendar';
 
@@ -15,7 +17,10 @@ export interface CalendarRowModel {
   choice: CalendarChoice;
   googleCalendarId: string;
   health: CalendarHealth;
+  details: string[];
+  showPause: boolean;
   onToggle: InputHandler;
+  onPauseToggle: InputHandler;
   onLabelChange: InputHandler;
   onColorChange: InputHandler;
 }
@@ -35,11 +40,28 @@ export type DisconnectModel = ReturnType<typeof useDisconnectAccount>;
 
 export const useCalendarsClient = ({
   accounts,
+  sharing: sharingView,
   error,
   notice,
 }: CalendarsClientProps) => {
   const selection = useCalendarChoices(accounts);
   const disconnect = useDisconnectAccount();
+  const sharing = useCalendarSharing(sharingView);
+
+  const toRow = (calendar: CalendarView): CalendarRowModel => {
+    const choice = selection.choices[calendar.choice.id] ?? calendar.choice;
+    return {
+      choice,
+      googleCalendarId: calendar.googleCalendarId,
+      health: calendar.health,
+      details: calendar.details,
+      showPause: choice.active,
+      onToggle: selection.handleToggle(choice.id),
+      onPauseToggle: selection.handlePauseToggle(choice.id),
+      onLabelChange: selection.handleLabelChange(choice.id),
+      onColorChange: selection.handleColorChange(choice.id),
+    };
+  };
 
   const accountCards: AccountCardModel[] = accounts.map((account) => ({
     id: account.id,
@@ -48,20 +70,14 @@ export const useCalendarsClient = ({
     disconnectLabel: disconnect.disconnectLabel(account.id),
     isDisconnecting: disconnect.isDisconnecting,
     onDisconnect: disconnect.handleDisconnect(account.id),
-    calendars: account.calendars.map((calendar) => ({
-      choice: selection.choices[calendar.choice.id] ?? calendar.choice,
-      googleCalendarId: calendar.googleCalendarId,
-      health: calendar.health,
-      onToggle: selection.handleToggle(calendar.choice.id),
-      onLabelChange: selection.handleLabelChange(calendar.choice.id),
-      onColorChange: selection.handleColorChange(calendar.choice.id),
-    })),
+    calendars: account.calendars.map(toRow),
   }));
 
   return {
     accountCards,
     selection,
     disconnect,
+    sharing,
     connectHref: CONNECT_GOOGLE_PATH,
     hasAccounts: accounts.length > 0,
     hasNoAccounts: accounts.length === 0,

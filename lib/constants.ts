@@ -33,6 +33,24 @@ export const LOGIN_NOTICE_MESSAGES: Record<string, string> = {
   deleted: 'Your account and everything in it has been deleted.',
 };
 
+export const MINUTE_MS = 60_000;
+
+export const HOUR_MS = 60 * MINUTE_MS;
+
+export const DAY_MS = 24 * HOUR_MS;
+
+export const AGENDA_DAYS = 8;
+
+export const DUPLICATE_WINDOW_MS = 5 * MINUTE_MS;
+
+export const CHANGE_MARKER_MS = DAY_MS;
+
+export const VISIT_SESSION_GAP_MS = 30 * MINUTE_MS;
+
+export const CLOCK_TICK_MS = 1000;
+
+export const AGENDA_REFRESH_DELAY_MS = 400;
+
 export const CALENDARS_PATH = '/calendars';
 
 export const CALENDAR_ERROR_MESSAGES: Record<string, string> = {
@@ -73,9 +91,28 @@ export const CALENDAR_NOTICE_MESSAGES: Record<string, string> = {
     'Google account connected. Pick the calendars Bell should include.',
   disconnected: 'Google account disconnected and its events removed.',
   saved: 'Calendars saved.',
+  shared:
+    'Calendar shared. Its meetings now show on their agenda and ring on their own channels.',
+  unshared: 'Sharing stopped. Those meetings are off their agenda.',
 };
 
 export const INVITE_MESSAGES = {
   notOwner: 'Only the owner can invite people.',
   invalidEmail: 'Enter a valid email address.',
 };
+
+export const SHARE_ERRORS = {
+  unknown_calendar: { message: 'Unknown calendar', status: 404 },
+  unknown_user: {
+    message:
+      'Nobody with that email uses Bell yet. Ask the owner to invite them, and have them sign in once.',
+    status: 404,
+  },
+  self: {
+    message: 'That is your own email. Share with a teammate.',
+    status: 400,
+  },
+  missing: { message: 'That share is already gone.', status: 404 },
+} as const;
+
+export const SHARED_BADGE_SUFFIX = 'shared';

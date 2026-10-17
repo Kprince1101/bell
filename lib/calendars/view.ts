@@ -1,4 +1,8 @@
-import { describeHealth, isUnhealthy } from '@/lib/calendars/health';
+import {
+  describeHealth,
+  healthDetails,
+  isUnhealthy,
+} from '@/lib/calendars/health';
 import {
   CALENDAR_ERROR_MESSAGES,
   CALENDAR_NOTICE_MESSAGES,
@@ -23,11 +27,13 @@ const toCalendarView = (
   choice: {
     id: calendar.id,
     active: calendar.active,
+    paused: calendar.paused,
     label: calendar.label,
     color: calendar.color,
   },
   googleCalendarId: calendar.google_calendar_id,
   health: describeHealth(calendar, timeZone),
+  details: healthDetails(calendar, timeZone),
 });
 
 export const buildCalendarsView = (

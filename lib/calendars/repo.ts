@@ -159,11 +159,11 @@ export const createCalendarRepo = (
           .or(`channel_expires_at.is.null,channel_expires_at.lt."${cutoff}"`),
       ),
 
-    saveChoice: async ({ id, active, label, color }) => {
+    saveChoice: async ({ id, active, paused, label, color }) => {
       unwrap(
         await admin
           .from('calendars')
-          .update({ active, label, color })
+          .update({ active, paused, label, color })
           .eq('id', id),
       );
     },

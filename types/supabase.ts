@@ -30,6 +30,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      agenda_visits: {
+        Row: {
+          baseline_at: string | null;
+          seen_at: string;
+          user_id: string;
+        };
+        Insert: {
+          baseline_at?: string | null;
+          seen_at: string;
+          user_id: string;
+        };
+        Update: {
+          baseline_at?: string | null;
+          seen_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       accounts: {
         Row: {
           created_at: string;
@@ -54,6 +72,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      calendar_shares: {
+        Row: {
+          calendar_id: string;
+          created_at: string;
+          created_by: string;
+          shared_with_user_id: string;
+        };
+        Insert: {
+          calendar_id: string;
+          created_at?: string;
+          created_by: string;
+          shared_with_user_id: string;
+        };
+        Update: {
+          calendar_id?: string;
+          created_at?: string;
+          created_by?: string;
+          shared_with_user_id?: string;
+        };
+        Relationships: [];
+      };
       calendars: {
         Row: {
           account_id: string;
@@ -70,6 +109,7 @@ export type Database = {
           label: string;
           last_error: string | null;
           last_sync_at: string | null;
+          paused: boolean;
           quiet: boolean;
           sync_token: string | null;
           time_zone: string | null;
@@ -90,6 +130,7 @@ export type Database = {
           label: string;
           last_error?: string | null;
           last_sync_at?: string | null;
+          paused?: boolean;
           quiet?: boolean;
           sync_token?: string | null;
           time_zone?: string | null;
@@ -110,6 +151,7 @@ export type Database = {
           label?: string;
           last_error?: string | null;
           last_sync_at?: string | null;
+          paused?: boolean;
           quiet?: boolean;
           sync_token?: string | null;
           time_zone?: string | null;
@@ -299,6 +341,7 @@ export type Database = {
           all_day: boolean;
           attendees: Json;
           calendar_id: string;
+          changed_at: string | null;
           created_at: string;
           description: string | null;
           ends_at: string;
@@ -310,6 +353,7 @@ export type Database = {
           last_seen_at: string;
           location: string | null;
           organizer: string | null;
+          previous_starts_at: string | null;
           raw_start: string;
           recurring_event_id: string | null;
           source_tz: string | null;
@@ -322,6 +366,7 @@ export type Database = {
           all_day?: boolean;
           attendees?: Json;
           calendar_id: string;
+          changed_at?: string | null;
           created_at?: string;
           description?: string | null;
           ends_at: string;
@@ -333,6 +378,7 @@ export type Database = {
           last_seen_at?: string;
           location?: string | null;
           organizer?: string | null;
+          previous_starts_at?: string | null;
           raw_start: string;
           recurring_event_id?: string | null;
           source_tz?: string | null;
@@ -345,6 +391,7 @@ export type Database = {
           all_day?: boolean;
           attendees?: Json;
           calendar_id?: string;
+          changed_at?: string | null;
           created_at?: string;
           description?: string | null;
           ends_at?: string;
@@ -356,6 +403,7 @@ export type Database = {
           last_seen_at?: string;
           location?: string | null;
           organizer?: string | null;
+          previous_starts_at?: string | null;
           raw_start?: string;
           recurring_event_id?: string | null;
           source_tz?: string | null;
@@ -546,6 +594,34 @@ export type Database = {
       set_calendar_quiet: {
         Args: { p_user_id: string; p_calendar_id: string; p_quiet: boolean };
         Returns: boolean;
+      };
+      share_calendar: {
+        Args: { p_user_id: string; p_calendar_id: string; p_email: string };
+        Returns: string;
+      };
+      unshare_calendar: {
+        Args: {
+          p_user_id: string;
+          p_calendar_id: string;
+          p_shared_with: string;
+        };
+        Returns: boolean;
+      };
+      shared_with_me: {
+        Args: never;
+        Returns: { id: string; label: string; color: string }[];
+      };
+      my_shares: {
+        Args: never;
+        Returns: {
+          calendar_id: string;
+          shared_with_user_id: string;
+          email: string;
+        }[];
+      };
+      calendar_recipients: {
+        Args: { p_calendar_id: string };
+        Returns: { user_id: string }[];
       };
       set_channel_active: {
         Args: { p_user_id: string; p_kind: string; p_active: boolean };

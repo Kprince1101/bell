@@ -102,6 +102,10 @@ export const connectChannels = async (db: PGlite, who: BellPerson) => {
   await saveChannel(db, who.id, ['slack'], who.slackUser, who.slackTeam);
   await saveChannel(db, who.id, ['pushover'], who.pushoverKey);
   await saveChannel(db, who.id, ['sms', 'voice'], who.phone);
+  await db.query(
+    "select bell.record_channel_test($1, 'pushover', true, null, now())",
+    [who.id],
+  );
 };
 
 export interface ShareDb {

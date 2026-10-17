@@ -23,15 +23,17 @@ const EVERY_BELL_TABLE = [
   'calendar_shares',
   'calendars',
   'channel_secrets',
+  'channel_tests',
   'channels',
   'events',
+  'job_runs',
   'migrations',
   'notifications',
   'slack_installs',
   'users',
 ];
 
-const TABLES_WITHOUT_USER_ROWS = ['migrations'];
+const TABLES_WITHOUT_USER_ROWS = ['job_runs', 'migrations'];
 
 const READABLE_OWN_TABLES = [
   'users',
